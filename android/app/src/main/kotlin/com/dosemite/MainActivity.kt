@@ -1,4 +1,4 @@
-package com.example.medifind
+package com.dosemite
 
 import io.flutter.embedding.android.FlutterActivity
 

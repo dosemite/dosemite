@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'screens/intro.dart';
 import 'screens/drugstore_map.dart';
 import 'screens/settings.dart';
@@ -23,16 +24,18 @@ class PharmacyApp extends StatefulWidget {
 }
 
 class _PharmacyAppState extends State<PharmacyApp> {
-  ThemeData _themeFor(AppTheme t) {
-    // If Material You is enabled, use a seed-based ColorScheme with the chosen brightness
-    final materialYou = ThemeController.instance.materialYou;
+  // Helper method to create a theme with dynamic color support
+  ThemeData _themeFor(AppTheme t, {ColorScheme? dynamicColorScheme}) {
     final brightness = (t == AppTheme.light) ? Brightness.light : Brightness.dark;
-
-    if (materialYou) {
-      final base = ThemeData.from(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: brightness),
+    final materialYou = ThemeController.instance.materialYou;
+    
+    // Use dynamic color if available and Material You is enabled
+    if (materialYou && dynamicColorScheme != null) {
+      final base = ThemeData(
+        colorScheme: dynamicColorScheme,
         useMaterial3: true,
       );
+      
       if (t == AppTheme.amoled) {
         return base.copyWith(
           scaffoldBackgroundColor: Colors.black,
@@ -40,9 +43,38 @@ class _PharmacyAppState extends State<PharmacyApp> {
           cardColor: Colors.grey[900],
         );
       }
+      
+      if (t == AppTheme.darkGray) {
+        return base.copyWith(
+          scaffoldBackgroundColor: Colors.grey[900],
+        );
+      }
+      
+      return base;
+    }
+
+    // Fallback to static colors when dynamic colors are not available or Material You is disabled
+    if (materialYou) {
+      final base = ThemeData.from(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.deepPurple,
+          brightness: brightness,
+        ),
+        useMaterial3: true,
+      );
+      
+      if (t == AppTheme.amoled) {
+        return base.copyWith(
+          scaffoldBackgroundColor: Colors.black,
+          canvasColor: Colors.black,
+          cardColor: Colors.grey[900],
+        );
+      }
+      
       if (t == AppTheme.darkGray) {
         return base.copyWith(scaffoldBackgroundColor: Colors.grey[900]);
       }
+      
       return base;
     }
 
@@ -56,7 +88,10 @@ class _PharmacyAppState extends State<PharmacyApp> {
         );
       case AppTheme.darkGray:
         return ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey, brightness: Brightness.dark),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blueGrey,
+            brightness: Brightness.dark,
+          ),
           useMaterial3: true,
           scaffoldBackgroundColor: Colors.grey[900],
         );
@@ -79,16 +114,29 @@ class _PharmacyAppState extends State<PharmacyApp> {
     return ValueListenableBuilder<AppTheme>(
       valueListenable: ThemeController.instance,
       builder: (context, themeChoice, _) {
-        return MaterialApp(
-          title: 'Pharmacy App',
-          theme: _themeFor(themeChoice),
-          home: widget.showIntro
-              ? IntroScreen(onGetStarted: (ctx) {
-                  ThemeController.setSeenIntro();
-                  // navigate to dashboard using the IntroScreen context (ctx)
-                  Navigator.of(ctx).pushReplacement(MaterialPageRoute(builder: (_) => const DashboardScreen()));
-                })
-              : const DashboardScreen(),
+        return DynamicColorBuilder(
+          builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+            // Choose the appropriate color scheme based on the theme
+            final isDark = themeChoice != AppTheme.light;
+            final dynamicColorScheme = isDark ? darkDynamic : lightDynamic;
+            
+            return MaterialApp(
+              title: 'Pharmacy App',
+              theme: _themeFor(themeChoice, dynamicColorScheme: dynamicColorScheme),
+              darkTheme: _themeFor(themeChoice, dynamicColorScheme: darkDynamic),
+              themeMode: themeChoice == AppTheme.light 
+                  ? ThemeMode.light 
+                  : (themeChoice == AppTheme.darkGray ? ThemeMode.dark : ThemeMode.dark),
+              home: widget.showIntro
+                  ? IntroScreen(onGetStarted: (ctx) {
+                      ThemeController.setSeenIntro();
+                      Navigator.of(ctx).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const DashboardScreen())
+                      );
+                    })
+                  : const DashboardScreen(),
+            );
+          },
         );
       },
     );
@@ -181,23 +229,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   IconButton(
                     tooltip: _notificationsEnabled ? 'Disable notifications' : 'Enable notifications',
                     onPressed: () async {
-                      // Toggle and persist without causing the FAB to shift when the SnackBar appears.
                       final prefs = await SharedPreferences.getInstance();
-                      // update local state after prefs to ensure persistence
                       setState(() => _notificationsEnabled = !_notificationsEnabled);
                       await prefs.setBool('notifications_enabled', _notificationsEnabled);
-
-                      // Show a floating SnackBar so it doesn't resize the Scaffold and move the FAB.
-                      if (!mounted) return;
-                      final fabSize = 86.0;
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(_notificationsEnabled ? 'Notifications enabled' : 'Notifications disabled'),
-                          behavior: SnackBarBehavior.floating,
-                          margin: EdgeInsets.fromLTRB(16, 0, 16, fabSize + 24),
-                        ),
-                      );
                     },
                     icon: Icon(
                       _notificationsEnabled ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
@@ -208,9 +242,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
 
-            // Search row with history icon to its right
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+            // Search row with history icon to its right - Only show in dashboard (_selectedIndex == 0)
+            if (_selectedIndex == 0) Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
                   Expanded(

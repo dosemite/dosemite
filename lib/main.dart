@@ -218,15 +218,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                   ),
-                  IconButton(
+                  // Settings button with Material 3 style
+                  IconButton.filledTonal(
+                    style: IconButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                     tooltip: 'Settings',
                     onPressed: () {
                       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
                     },
-                    icon: const Icon(Icons.settings_outlined),
+                    icon: const Icon(Icons.settings_outlined, size: 22),
                   ),
-                  // Notification enable/disable icon (toggles state)
-                  IconButton(
+                  const SizedBox(width: 8),
+                  // Notification button with Material 3 style
+                  IconButton.filledTonal(
+                    style: IconButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      backgroundColor: _notificationsEnabled 
+                          ? theme.colorScheme.primaryContainer 
+                          : theme.colorScheme.surfaceVariant,
+                    ),
                     tooltip: _notificationsEnabled ? 'Disable notifications' : 'Enable notifications',
                     onPressed: () async {
                       final prefs = await SharedPreferences.getInstance();
@@ -234,8 +249,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       await prefs.setBool('notifications_enabled', _notificationsEnabled);
                     },
                     icon: Icon(
-                      _notificationsEnabled ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
-                      color: _notificationsEnabled ? theme.colorScheme.primary : Colors.grey,
+                      _notificationsEnabled 
+                          ? Icons.notifications_active_outlined 
+                          : Icons.notifications_off_outlined,
+                      color: _notificationsEnabled 
+                          ? theme.colorScheme.onPrimaryContainer 
+                          : theme.colorScheme.onSurfaceVariant,
+                      size: 22,
                     ),
                   ),
                 ],
@@ -316,40 +336,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
 
       // Bottom navigation with notched FAB in center
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6,
-        child: SizedBox(
-          height: 64,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainer,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomAppBar(
+          height: 76,  // Slightly increased height to better accommodate icons
+          padding: EdgeInsets.zero,
+          surfaceTintColor: Colors.transparent,
+          clipBehavior: Clip.antiAlias,
           child: Row(
             children: [
-              // Left item (Medicine Tracker)
+              // Left item (Dashboard)
               Expanded(
-                child: InkWell(
+                child: _BottomNavTile(
+                  icon: Icons.dashboard_customize_outlined,
+                  label: 'Dashboard',
+                  selected: _selectedIndex == 0,
                   onTap: () => setState(() => _selectedIndex = 0),
-                  child: _BottomNavTile(
-                    icon: Icons.dashboard_customize_outlined,
-                    label: 'Dashboard',
-                    selected: _selectedIndex == 0,
-                  ),
                 ),
               ),
 
-              // Middle fixed-width area for FAB notch + label so the bar doesn't create an extra gap
+              // Middle area with Add Drug text
               SizedBox(
                 width: 72,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // push label lower inside the bottom bar so it doesn't sit between the FAB and the bar edge
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 28), // Push text down to align with FAB
                     Text(
                       'Add Drug',
-                      textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _selectedIndex == -1 ? Theme.of(context).colorScheme.primary : Colors.grey[800],
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
@@ -358,13 +386,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               // Right item (Map)
               Expanded(
-                child: InkWell(
+                child: _BottomNavTile(
+                  icon: Icons.map_outlined,
+                  label: 'Map',
+                  selected: _selectedIndex == 1,
                   onTap: () => setState(() => _selectedIndex = 1),
-                  child: _BottomNavTile(
-                    icon: Icons.map_outlined,
-                    label: 'Map',
-                    selected: _selectedIndex == 1,
-                  ),
                 ),
               ),
             ],
@@ -374,10 +400,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.only(bottom: 12),  // More bottom padding for FAB
         child: SizedBox(
-          width: 72,
-          height: 72,
+          width: 68,  // Slightly larger FAB
+          height: 68,  // Slightly larger FAB
           child: FloatingActionButton(
             onPressed: () {
               // open add drug flow
@@ -442,21 +468,88 @@ class _BottomNavTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool selected;
+  final VoidCallback? onTap;
 
-  const _BottomNavTile({required this.icon, required this.label, required this.selected});
+  const _BottomNavTile({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? Theme.of(context).colorScheme.primary : Colors.grey[600];
-    return SizedBox(
-      height: double.infinity,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(height: 6),
-          Text(label, style: TextStyle(color: color, fontSize: 12)),
-        ],
+    final theme = Theme.of(context);
+    final color = selected 
+        ? theme.colorScheme.primary 
+        : theme.colorScheme.onSurfaceVariant;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        height: kBottomNavigationBarHeight - -16,  // Reduced height to allow higher placement
+        constraints: const BoxConstraints(minWidth: 64),
+        padding: const EdgeInsets.only(top: 4),  // Slightly more top padding
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,  // Center vertically in the reduced height
+          children: [
+            // Icon with selection background
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Background circle for selected state
+                  if (selected)
+                    Container(
+                      width: 28,  // Slightly smaller circle
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer.withOpacity(1),  // More transparent
+                        borderRadius: BorderRadius.circular(3),  // Less circular
+                      ),
+                    ),
+                  Icon(
+                    icon, 
+                    color: color, 
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            // Selection dot
+            if (selected)
+              Container(
+                width: 4,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 2),  // Reduced bottom margin
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            // Text with proper constraints and padding
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

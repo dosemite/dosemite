@@ -1,15 +1,32 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/intro.dart';
 import 'screens/drugstore_map.dart';
 import 'screens/settings.dart';
 import 'screens/history.dart';
 import 'theme/theme_controller.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'theme/language_controller.dart';
+import 'utils/translations.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await ThemeController.instance.loadFromPrefs();
+  
+  // Tema ve dil ayarlarını yükle
+  await Future.wait([
+    ThemeController.instance.loadFromPrefs(),
+    LanguageController.instance.loadFromPrefs(),
+  ]);
+  
+  // Sistem temasını kontrol et ve ayarla
+  final brightness = WidgetsBinding.instance.window.platformBrightness;
+  if (ThemeController.instance.value == AppTheme.light && brightness == Brightness.dark) {
+    ThemeController.instance.setTheme(AppTheme.darkGray);
+  }
+  
   final seen = await ThemeController.hasSeenIntro();
   runApp(PharmacyApp(showIntro: !seen));
 }
@@ -26,16 +43,18 @@ class PharmacyApp extends StatefulWidget {
 class _PharmacyAppState extends State<PharmacyApp> {
   // Helper method to create a theme with dynamic color support
   ThemeData _themeFor(AppTheme t, {ColorScheme? dynamicColorScheme}) {
-    final brightness = (t == AppTheme.light) ? Brightness.light : Brightness.dark;
+    final brightness = (t == AppTheme.light)
+        ? Brightness.light
+        : Brightness.dark;
     final materialYou = ThemeController.instance.materialYou;
-    
+
     // Use dynamic color if available and Material You is enabled
     if (materialYou && dynamicColorScheme != null) {
       final base = ThemeData(
         colorScheme: dynamicColorScheme,
         useMaterial3: true,
       );
-      
+
       if (t == AppTheme.amoled) {
         return base.copyWith(
           scaffoldBackgroundColor: Colors.black,
@@ -43,13 +62,11 @@ class _PharmacyAppState extends State<PharmacyApp> {
           cardColor: Colors.grey[900],
         );
       }
-      
+
       if (t == AppTheme.darkGray) {
-        return base.copyWith(
-          scaffoldBackgroundColor: Colors.grey[900],
-        );
+        return base.copyWith(scaffoldBackgroundColor: Colors.grey[900]);
       }
-      
+
       return base;
     }
 
@@ -62,7 +79,7 @@ class _PharmacyAppState extends State<PharmacyApp> {
         ),
         useMaterial3: true,
       );
-      
+
       if (t == AppTheme.amoled) {
         return base.copyWith(
           scaffoldBackgroundColor: Colors.black,
@@ -70,11 +87,11 @@ class _PharmacyAppState extends State<PharmacyApp> {
           cardColor: Colors.grey[900],
         );
       }
-      
+
       if (t == AppTheme.darkGray) {
         return base.copyWith(scaffoldBackgroundColor: Colors.grey[900]);
       }
-      
+
       return base;
     }
 
@@ -114,27 +131,54 @@ class _PharmacyAppState extends State<PharmacyApp> {
     return ValueListenableBuilder<AppTheme>(
       valueListenable: ThemeController.instance,
       builder: (context, themeChoice, _) {
-        return DynamicColorBuilder(
-          builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
-            // Choose the appropriate color scheme based on the theme
-            final isDark = themeChoice != AppTheme.light;
-            final dynamicColorScheme = isDark ? darkDynamic : lightDynamic;
-            
-            return MaterialApp(
-              title: 'Pharmacy App',
-              theme: _themeFor(themeChoice, dynamicColorScheme: dynamicColorScheme),
-              darkTheme: _themeFor(themeChoice, dynamicColorScheme: darkDynamic),
-              themeMode: themeChoice == AppTheme.light 
-                  ? ThemeMode.light 
-                  : (themeChoice == AppTheme.darkGray ? ThemeMode.dark : ThemeMode.dark),
-              home: widget.showIntro
-                  ? IntroScreen(onGetStarted: (ctx) {
-                      ThemeController.setSeenIntro();
-                      Navigator.of(ctx).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const DashboardScreen())
-                      );
-                    })
-                  : const DashboardScreen(),
+        return ValueListenableBuilder<AppLanguage>(
+          valueListenable: LanguageController.instance,
+          builder: (context, languageChoice, _) {
+            return DynamicColorBuilder(
+              builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+                // Choose the appropriate color scheme based on the theme
+                final isDark = themeChoice != AppTheme.light;
+                final dynamicColorScheme = isDark ? darkDynamic : lightDynamic;
+
+                return MaterialApp(
+                  title: Translations.appTitle,
+                  locale: LanguageController.instance.locale,
+                  supportedLocales: const [
+                    Locale('en', 'US'),
+                    Locale('tr', 'TR'),
+                  ],
+                  localizationsDelegates: const [
+                    GlobalMaterialLocalizations.delegate,
+                    GlobalWidgetsLocalizations.delegate,
+                    GlobalCupertinoLocalizations.delegate,
+                  ],
+                  theme: _themeFor(
+                    themeChoice,
+                    dynamicColorScheme: dynamicColorScheme,
+                  ),
+                  darkTheme: _themeFor(
+                    themeChoice,
+                    dynamicColorScheme: darkDynamic,
+                  ),
+                  themeMode: themeChoice == AppTheme.light
+                      ? ThemeMode.light
+                      : (themeChoice == AppTheme.darkGray
+                            ? ThemeMode.dark
+                            : ThemeMode.dark),
+                  home: widget.showIntro
+                      ? IntroScreen(
+                          onGetStarted: (ctx) {
+                            ThemeController.setSeenIntro();
+                            Navigator.of(ctx).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => const DashboardScreen(),
+                              ),
+                            );
+                          },
+                        )
+                      : const DashboardScreen(),
+                );
+              },
             );
           },
         );
@@ -150,22 +194,31 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
   // 0 = Medicine Tracker, 1 = Drugstore Map
   int _selectedIndex = 0;
   bool _notificationsEnabled = true;
   String _userName = '';
+  late PageController _pageController;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: 0);
     _loadPrefs();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString('user_name') ?? '';
-    final notif = prefs.getBool('notifications_enabled') ?? _notificationsEnabled;
+    final notif =
+        prefs.getBool('notifications_enabled') ?? _notificationsEnabled;
     setState(() {
       _userName = name;
       _notificationsEnabled = notif;
@@ -174,7 +227,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _greetingText() {
     final hour = DateTime.now().hour;
-    final prefix = hour < 12 ? 'Good Morning' : (hour < 18 ? 'Good Afternoon' : 'Good Evening');
+    final prefix = hour < 12
+        ? Translations.goodMorning
+        : (hour < 18 ? Translations.goodAfternoon : Translations.goodEvening);
     if (_userName.isNotEmpty) return '$prefix, $_userName';
     return prefix;
   }
@@ -199,7 +254,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     backgroundColor: const Color(0xFF90CAF9),
                     child: Text(
                       _userName.isNotEmpty ? _userName[0].toUpperCase() : 'A',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -224,10 +282,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
                     ),
                     tooltip: 'Settings',
                     onPressed: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      );
                     },
                     icon: const Icon(Icons.settings_outlined, size: 22),
                   ),
@@ -238,22 +301,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      backgroundColor: _notificationsEnabled 
-                          ? theme.colorScheme.primaryContainer 
+                      backgroundColor: _notificationsEnabled
+                          ? theme.colorScheme.primaryContainer
                           : theme.colorScheme.surfaceVariant,
                     ),
-                    tooltip: _notificationsEnabled ? 'Disable notifications' : 'Enable notifications',
+                    tooltip: _notificationsEnabled
+                        ? 'Disable notifications'
+                        : 'Enable notifications',
                     onPressed: () async {
                       final prefs = await SharedPreferences.getInstance();
-                      setState(() => _notificationsEnabled = !_notificationsEnabled);
-                      await prefs.setBool('notifications_enabled', _notificationsEnabled);
+                      setState(
+                        () => _notificationsEnabled = !_notificationsEnabled,
+                      );
+                      await prefs.setBool(
+                        'notifications_enabled',
+                        _notificationsEnabled,
+                      );
                     },
                     icon: Icon(
-                      _notificationsEnabled 
-                          ? Icons.notifications_active_outlined 
+                      _notificationsEnabled
+                          ? Icons.notifications_active_outlined
                           : Icons.notifications_off_outlined,
-                      color: _notificationsEnabled 
-                          ? theme.colorScheme.onPrimaryContainer 
+                      color: _notificationsEnabled
+                          ? theme.colorScheme.onPrimaryContainer
                           : theme.colorScheme.onSurfaceVariant,
                       size: 22,
                     ),
@@ -263,69 +333,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
 
             // Search row with history icon to its right - Only show in dashboard (_selectedIndex == 0)
-            if (_selectedIndex == 0) Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Search medications...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            if (_selectedIndex == 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          decoration: InputDecoration(
+                            hintText: Translations.searchMedications,
+                            prefixIcon: const Icon(Icons.search),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    height: 46,
-                    width: 46,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
-                      shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 46,
+                      width: 46,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurface.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconButton(
+                        icon: const Icon(Icons.history),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const HistoryScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                    child: IconButton(
-                      icon: const Icon(Icons.history),
-                      onPressed: () {
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HistoryScreen()));
-                      },
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
             Expanded(
-              child: IndexedStack(
-                index: _selectedIndex,
+              child: PageView(
+                controller: _pageController,
+                physics: const BouncingScrollPhysics(),
+                onPageChanged: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
                 children: [
-                  // Medicine Tracker screen (placeholder list designed like attachment)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ListView(
+                  // Dashboard content
+                  SingleChildScrollView(
+                    key: const PageStorageKey('dashboard'),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 8),
-                        const Text('Morning', style: TextStyle(fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 8),
-                        _medCard('Lisinopril', '10mg', '9:00 AM', Colors.blue.shade100, Icons.medication),
-                        const SizedBox(height: 8),
-                        _medCard('Metformin', '500mg', '9:00 AM', Colors.blue.shade100, Icons.medication),
+                        Text(
+                          _greetingText(),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          Translations.todaysSchedule,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(height: 16),
-                        const Text('Afternoon', style: TextStyle(fontWeight: FontWeight.w600)),
+                        _medCard(
+                          'Metformin',
+                          '500mg',
+                          '9:00 AM',
+                          Colors.blue.shade100,
+                          Icons.medication,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          Translations.afternoon,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(height: 8),
-                        _medCard('Atorvastatin', '20mg', '1:00 PM', Colors.orange.shade100, Icons.local_hospital),
-                                  const SizedBox(height: 120), // Give more space above bottom bar so last item isn't obscured
+                        _medCard(
+                          'Atorvastatin',
+                          '20mg',
+                          '1:00 PM',
+                          Colors.orange.shade100,
+                          Icons.local_hospital,
+                        ),
+                        const SizedBox(height: 120), // Space for bottom bar
                       ],
                     ),
                   ),
-
                   // Map screen
                   const DrugstoreMapScreen(),
                 ],
@@ -349,7 +456,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         child: BottomAppBar(
-          height: 76,  // Slightly increased height to better accommodate icons
+          height: 76, // Slightly increased height to better accommodate icons
           padding: EdgeInsets.zero,
           surfaceTintColor: Colors.transparent,
           clipBehavior: Clip.antiAlias,
@@ -359,9 +466,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: _BottomNavTile(
                   icon: Icons.dashboard_customize_outlined,
-                  label: 'Dashboard',
+                  label: Translations.dashboard,
                   selected: _selectedIndex == 0,
-                  onTap: () => setState(() => _selectedIndex = 0),
+                  onTap: () {
+                    if (_selectedIndex != 0) {
+                      _pageController.animateToPage(
+                        0,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutQuart,
+                      );
+                    }
+                  },
                 ),
               ),
 
@@ -371,9 +486,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 28), // Push text down to align with FAB
+                    const SizedBox(
+                      height: 28,
+                    ), // Push text down to align with FAB
                     Text(
-                      'Add Drug',
+                      Translations.addDrug,
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -388,9 +505,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: _BottomNavTile(
                   icon: Icons.map_outlined,
-                  label: 'Map',
+                  label: Translations.map,
                   selected: _selectedIndex == 1,
-                  onTap: () => setState(() => _selectedIndex = 1),
+                  onTap: () {
+                    if (_selectedIndex != 1) {
+                      _pageController.animateToPage(
+                        1,
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeOutQuart,
+                      );
+                    }
+                  },
                 ),
               ),
             ],
@@ -400,17 +525,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 12),  // More bottom padding for FAB
+        padding: const EdgeInsets.only(
+          bottom: 12,
+        ), // More bottom padding for FAB
         child: SizedBox(
-          width: 68,  // Slightly larger FAB
-          height: 68,  // Slightly larger FAB
+          width: 68, // Slightly larger FAB
+          height: 68, // Slightly larger FAB
           child: FloatingActionButton(
             onPressed: () {
               // open add drug flow
             },
             elevation: 6,
             backgroundColor: Theme.of(context).colorScheme.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
             child: const Icon(Icons.add, size: 32),
           ),
         ),
@@ -419,14 +548,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // small card to match the attachment look
-  Widget _medCard(String name, String dose, String time, Color bg, IconData leading) {
+  Widget _medCard(
+    String name,
+    String dose,
+    String time,
+    Color bg,
+    IconData leading,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -434,7 +573,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             height: 48,
             width: 48,
-            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(leading, color: Colors.black54),
           ),
           const SizedBox(width: 12),
@@ -442,9 +584,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('$name, $dose', style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '$name, $dose',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
-                Text(time, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                Text(
+                  time,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                ),
               ],
             ),
           ),
@@ -456,7 +604,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               border: Border.all(color: Colors.grey.shade300),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Icon(Icons.check_box_outline_blank, size: 18, color: Colors.grey),
+            child: const Icon(
+              Icons.check_box_outline_blank,
+              size: 18,
+              color: Colors.grey,
+            ),
           ),
         ],
       ),
@@ -480,20 +632,23 @@ class _BottomNavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = selected 
-        ? theme.colorScheme.primary 
+    final color = selected
+        ? theme.colorScheme.primary
         : theme.colorScheme.onSurfaceVariant;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        height: kBottomNavigationBarHeight - -16,  // Reduced height to allow higher placement
+        height:
+            kBottomNavigationBarHeight -
+            -16, // Reduced height to allow higher placement
         constraints: const BoxConstraints(minWidth: 64),
-        padding: const EdgeInsets.only(top: 4),  // Slightly more top padding
+        padding: const EdgeInsets.only(top: 4), // Slightly more top padding
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,  // Center vertically in the reduced height
+          mainAxisAlignment: MainAxisAlignment
+              .center, // Center vertically in the reduced height
           children: [
             // Icon with selection background
             Container(
@@ -506,18 +661,16 @@ class _BottomNavTile extends StatelessWidget {
                   // Background circle for selected state
                   if (selected)
                     Container(
-                      width: 28,  // Slightly smaller circle
+                      width: 28, // Slightly smaller circle
                       height: 28,
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer.withOpacity(1),  // More transparent
-                        borderRadius: BorderRadius.circular(3),  // Less circular
+                        color: theme.colorScheme.primaryContainer.withOpacity(
+                          0.5,
+                        ), // More transparent
+                        borderRadius: BorderRadius.circular(3), // Less circular
                       ),
                     ),
-                  Icon(
-                    icon, 
-                    color: color, 
-                    size: 22,
-                  ),
+                  Icon(icon, color: color, size: 22),
                 ],
               ),
             ),
@@ -527,7 +680,9 @@ class _BottomNavTile extends StatelessWidget {
               Container(
                 width: 4,
                 height: 4,
-                margin: const EdgeInsets.only(bottom: 2),  // Reduced bottom margin
+                margin: const EdgeInsets.only(
+                  bottom: 2,
+                ), // Reduced bottom margin
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary,
                   shape: BoxShape.circle,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/translations.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({Key? key}) : super(key: key);
@@ -8,7 +9,7 @@ class HistoryScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final items = List.generate(8, (i) => 'Medication ${i + 1}');
     return Scaffold(
-      appBar: AppBar(title: const Text('History')),
+      appBar: AppBar(title: Text(Translations.history)),
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: items.length,
@@ -30,7 +31,7 @@ class HistoryScreen extends StatelessWidget {
                     children: [
                       Text(items[index], style: const TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
-                      Text('Taken • ${DateTime.now().subtract(Duration(hours: index * 3)).toLocal()}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      Text('${Translations.taken} • ${DateTime.now().subtract(Duration(hours: index * 3)).toLocal()}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                     ],
                   ),
                 ),

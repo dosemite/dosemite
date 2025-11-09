@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/theme_controller.dart';
 import '../theme/language_controller.dart';
@@ -24,6 +27,8 @@ class _IntroScreenState extends State<IntroScreen> {
   bool _notifications = true;
   bool _locationPermissionGranted = false;
   bool _notificationPermissionGranted = false;
+  bool _requestingLocationPermission = false;
+  bool _requestingNotificationPermission = false;
   AppLanguage _selectedLanguage = LanguageController.instance.value;
 
   @override
@@ -46,6 +51,8 @@ class _IntroScreenState extends State<IntroScreen> {
         });
       }
     });
+
+    _refreshPermissionStatuses();
   }
 
   @override
@@ -55,6 +62,80 @@ class _IntroScreenState extends State<IntroScreen> {
     _nameController.dispose();
     _nameFocusNode.dispose();
     super.dispose();
+  }
+
+  Permission get _locationPermission => Platform.isIOS
+      ? Permission.locationWhenInUse
+      : Permission.location;
+
+  bool _isLocationAuthorized(PermissionStatus status) =>
+      status.isGranted || status.isLimited;
+
+  bool _isNotificationAuthorized(PermissionStatus status) =>
+      status.isGranted || status == PermissionStatus.provisional;
+
+  Future<void> _refreshPermissionStatuses() async {
+    final locStatus = await _locationPermission.status;
+    final notifStatus = await Permission.notification.status;
+
+    if (!mounted) return;
+    setState(() {
+      _locationPermissionGranted = _isLocationAuthorized(locStatus);
+      _notificationPermissionGranted = _isNotificationAuthorized(notifStatus);
+    });
+  }
+
+  Future<void> _requestLocationPermission() async {
+    if (_requestingLocationPermission) return;
+    setState(() => _requestingLocationPermission = true);
+
+    final status = await _locationPermission.request();
+    final granted = _isLocationAuthorized(status);
+
+    if (!mounted) return;
+
+    setState(() {
+      _locationPermissionGranted = granted;
+      _requestingLocationPermission = false;
+    });
+
+    if (!granted && status.isPermanentlyDenied) {
+      _showOpenSettingsSnackbar();
+    }
+  }
+
+  Future<void> _requestNotificationPermission() async {
+    if (_requestingNotificationPermission) return;
+    setState(() => _requestingNotificationPermission = true);
+
+    final status = await Permission.notification.request();
+    final granted = _isNotificationAuthorized(status);
+
+    if (!mounted) return;
+
+    setState(() {
+      _notificationPermissionGranted = granted;
+      _requestingNotificationPermission = false;
+    });
+
+    if (!granted && status.isPermanentlyDenied) {
+      _showOpenSettingsSnackbar();
+    }
+  }
+
+  void _showOpenSettingsSnackbar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(Translations.permissionDeniedOpenSettings),
+        action: SnackBarAction(
+          label: Translations.openSettings,
+          onPressed: () {
+            openAppSettings();
+          },
+        ),
+      ),
+    );
   }
 
   void _onLanguageChanged() {
@@ -462,7 +543,9 @@ class _IntroScreenState extends State<IntroScreen> {
 
   Widget _buildPermissionsPage() {
     final theme = Theme.of(context);
-    final allPermissionsGranted = _locationPermissionGranted && _notificationPermissionGranted;
+    final notificationsRequired = _notifications;
+    final allPermissionsGranted = _locationPermissionGranted &&
+        (!notificationsRequired || _notificationPermissionGranted);
     
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
@@ -512,12 +595,21 @@ class _IntroScreenState extends State<IntroScreen> {
               leading: const Icon(Icons.location_on_outlined),
               title: Text(Translations.location),
               subtitle: Text(Translations.findNearbyPharmacies),
-              trailing: TextButton(
-                child: Text(_locationPermissionGranted ? Translations.granted : Translations.allow),
-                onPressed: () {
-                  setState(() => _locationPermissionGranted = true);
-                },
-              ),
+              trailing: _requestingLocationPermission
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton(
+                      onPressed:
+                          _locationPermissionGranted ? null : _requestLocationPermission,
+                      child: Text(
+                        _locationPermissionGranted
+                            ? Translations.granted
+                            : Translations.allow,
+                      ),
+                    ),
             ),
           ),
           
@@ -529,12 +621,23 @@ class _IntroScreenState extends State<IntroScreen> {
               leading: const Icon(Icons.notifications_outlined),
               title: Text(Translations.notifications),
               subtitle: Text(Translations.sendMedicationReminders),
-              trailing: TextButton(
-                child: Text(_notificationPermissionGranted ? Translations.granted : Translations.allow),
-                onPressed: () {
-                  setState(() => _notificationPermissionGranted = true);
-                },
-              ),
+              trailing: _requestingNotificationPermission
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : TextButton(
+                      onPressed: (!notificationsRequired ||
+                              _notificationPermissionGranted)
+                          ? null
+                          : _requestNotificationPermission,
+                      child: Text(
+                        _notificationPermissionGranted
+                            ? Translations.granted
+                            : Translations.allow,
+                      ),
+                    ),
             ),
           ),
           
@@ -625,7 +728,9 @@ class _IntroScreenState extends State<IntroScreen> {
                     const SizedBox.shrink(),
                   
                   ElevatedButton(
-                    onPressed: (_currentPage == 3 && (!_locationPermissionGranted || !_notificationPermissionGranted))
+                    onPressed: (_currentPage == 3 &&
+                            (!_locationPermissionGranted ||
+                                (_notifications && !_notificationPermissionGranted)))
                         ? null
                         : () {
                             // Dismiss keyboard before changing pages

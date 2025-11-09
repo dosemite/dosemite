@@ -3,14 +3,14 @@ import '../theme/language_controller.dart';
 class Translations {
   // App Title
   static String get appTitle => _getText(
-    'Pharmacy App',
-    'Eczane Uygulaması',
+    'Dosemite',
+    'Dosemite',
   );
 
   // Welcome Screen
   static String get welcomeTitle => _getText(
     'Welcome to DoseMite',
-    'DoseMite\'e Hoş Geldiniz',
+    'DoseMite\'a Hoş Geldiniz',
   );
 
   static String get welcomeSubtitle => _getText(
@@ -120,7 +120,7 @@ class Translations {
   // Permissions Page
   static String get enablePermissions => _getText(
     'Enable permissions',
-    'İzinleri etkinleştir',
+    'İzinleri ver',
   );
 
   static String get weNeedTheseToProvide => _getText(
@@ -135,7 +135,7 @@ class Translations {
 
   static String get getRemindersAboutMedications => _getText(
     'Get reminders about your medications',
-    'İlaçlarınız hakkında hatırlatıcılar alın',
+    'İlaçlarınız hakkında bildirim alın',
   );
 
   static String get location => _getText(
@@ -155,8 +155,18 @@ class Translations {
 
   static String get sendMedicationReminders => _getText(
     'Send medication reminders',
-    'İlaç hatırlatıcıları gönder',
+    'İlaç bildirimleri gönder',
   );
+
+  static String reminderTitle(String medicationName) => _getText(
+        'Time to take $medicationName',
+        '$medicationName alma zamanı',
+      );
+
+  static String reminderBody(String dose) => _getText(
+        'Dose: $dose',
+        'Doz: $dose',
+      );
 
   static String get granted => _getText(
     'Granted',
@@ -171,6 +181,16 @@ class Translations {
   static String get pleaseGrantAllPermissions => _getText(
     'Please grant all permissions to continue',
     'Devam etmek için lütfen tüm izinleri verin',
+  );
+
+  static String get permissionDeniedOpenSettings => _getText(
+    'Permission denied. Please enable it in settings.',
+    'İzin reddedildi. Lütfen ayarlardan etkinleştirin.',
+  );
+
+  static String get openSettings => _getText(
+    'Open Settings',
+    'Ayarları Aç',
   );
 
   // Navigation
@@ -222,7 +242,12 @@ class Translations {
 
   static String get afternoon => _getText(
     'Afternoon',
-    'Öğleden Sonra',
+    'Öğlen',
+  );
+
+  static String get evening => _getText(
+    'Evening',
+    'Akşam',
   );
 
   static String get dashboard => _getText(
@@ -238,6 +263,71 @@ class Translations {
   static String get addDrug => _getText(
     'Add Drug',
     'İlaç Ekle',
+  );
+
+  static String get medicationName => _getText(
+    'Medication name',
+    'İlaç adı',
+  );
+
+  static String get medicationDose => _getText(
+    'Dose',
+    'Doz',
+  );
+
+  static String get usageTime => _getText(
+    'Usage time',
+    'Kullanım zamanı',
+  );
+
+  static String get selectTime => _getText(
+    'Select time',
+    'Zaman seç',
+  );
+
+  static String get medicationNotesOptional => _getText(
+    'Notes (optional)',
+    'Notlar (isteğe bağlı)',
+  );
+
+  static String get medicationFormIncomplete => _getText(
+    'Please fill in the required fields.',
+    'Gerekli alanları doldurmanız lazım!',
+  );
+
+  static String get medicationAdded => _getText(
+    'Medication added',
+    'İlaç eklendi',
+  );
+
+  static String get unableToSaveMedication => _getText(
+    'Unable to save medication.',
+    'İlaç kaydedilemedi.',
+  );
+
+  static String get unableToLoadMedications => _getText(
+    'Unable to load medications.',
+    'İlaçlar yüklenemedi.',
+  );
+
+  static String get noMedicationsAdded => _getText(
+    'No medications added.',
+    'Hiç ilaç eklenmedi.',
+  );
+
+  static String get markMedicationTaken => _getText(
+    'Mark as taken',
+    'Alındı olarak işaretle',
+  );
+
+  static String get medicationMarkedAsTaken => _getText(
+    'Medication marked as taken',
+    'İlaç alındı olarak işaretlendi',
+  );
+
+  static String get noHistoryYet => _getText(
+    'No medication history yet.',
+    'Henüz ilaç geçmişi yok.',
   );
 
   // Settings

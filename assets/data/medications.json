@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Metformin",
+    "dose": "500mg",
+    "time": "09:00",
+    "period": "morning",
+    "isEnabled": true,
+    "isHistoric": false
+  },
+  {
+    "name": "Atorvastatin",
+    "dose": "20mg",
+    "time": "13:00",
+    "period": "afternoon",
+    "isEnabled": true,
+    "isHistoric": false
+  },
+  {
+    "name": "Lisinopril",
+    "dose": "10mg",
+    "time": "21:00",
+    "period": "evening",
+    "isEnabled": false,
+    "isHistoric": true
+  }
+]

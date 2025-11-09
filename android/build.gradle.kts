@@ -1,3 +1,5 @@
+import java.nio.file.Path
+
 allprojects {
     repositories {
         google()
@@ -11,9 +13,14 @@ val newBuildDir: Directory =
         .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
+val rootProjectPath: Path = rootProject.projectDir.canonicalFile.toPath()
+
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
+    val projectPath = project.projectDir.canonicalFile.toPath()
+    if (projectPath.startsWith(rootProjectPath)) {
+        val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+        project.layout.buildDirectory.value(newSubprojectBuildDir)
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

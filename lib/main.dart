@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'data/medication_repository.dart';
 import 'screens/intro.dart';
 import 'screens/drugstore_map.dart';
 import 'screens/settings.dart';
@@ -11,6 +12,8 @@ import 'screens/history.dart';
 import 'theme/theme_controller.dart';
 import 'theme/language_controller.dart';
 import 'utils/translations.dart';
+import 'models/medication.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,6 +22,7 @@ Future<void> main() async {
   await Future.wait([
     ThemeController.instance.loadFromPrefs(),
     LanguageController.instance.loadFromPrefs(),
+    NotificationService.instance.initialize(),
   ]);
   
   // Sistem temasını kontrol et ve ayarla
@@ -200,11 +204,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   bool _notificationsEnabled = true;
   String _userName = '';
   late PageController _pageController;
+  final MedicationRepository _medicationRepository = MedicationRepository();
+  late Future<List<Medication>> _medicationsFuture;
+  final Set<int> _markingMedicationIndices = <int>{};
+  List<Medication>? _latestMedications;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
+    _initializeMedications();
     _loadPrefs();
   }
 
@@ -223,6 +232,133 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       _userName = name;
       _notificationsEnabled = notif;
     });
+    await _syncNotifications();
+  }
+
+  void _initializeMedications() {
+    final future = _medicationRepository.loadMedications();
+    _medicationsFuture = future;
+    future
+        .then((medications) {
+          _latestMedications = medications;
+          return _syncNotifications(medications: medications);
+        })
+        .catchError((_) {});
+  }
+
+  void _refreshMedications() {
+    final future = _medicationRepository.loadMedications();
+    setState(() {
+      _medicationsFuture = future;
+    });
+    future
+        .then((medications) {
+          _latestMedications = medications;
+          return _syncNotifications(medications: medications);
+        })
+        .catchError((_) {});
+  }
+
+  Future<void> _syncNotifications({List<Medication>? medications}) async {
+    final meds = medications ?? _latestMedications;
+    if (meds == null) {
+      try {
+        final latest = await _medicationRepository.loadMedications();
+        _latestMedications = latest;
+        await NotificationService.instance.syncMedications(
+          latest,
+          notificationsEnabled: _notificationsEnabled,
+        );
+      } catch (_) {}
+      return;
+    }
+
+    try {
+      await NotificationService.instance.syncMedications(
+        meds,
+        notificationsEnabled: _notificationsEnabled,
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _onAddMedicationPressed() async {
+    final medication = await _showAddMedicationSheet();
+    if (medication == null) {
+      return;
+    }
+
+    try {
+      await _medicationRepository.addMedication(medication);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.unableToSaveMedication)),
+      );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    _refreshMedications();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(Translations.medicationAdded)),
+    );
+  }
+
+  Future<void> _markMedicationTaken(int index) async {
+    if (_markingMedicationIndices.contains(index)) {
+      return;
+    }
+
+    setState(() {
+      _markingMedicationIndices.add(index);
+    });
+
+    try {
+      final medications = await _medicationRepository.loadMedications();
+      if (index < 0 || index >= medications.length) {
+        return;
+      }
+
+      final updatedMedication = medications[index].copyWith(
+        isHistoric: true,
+        isEnabled: false,
+      );
+
+      medications[index] = updatedMedication;
+      await _medicationRepository.saveMedications(medications);
+
+      if (!mounted) {
+        return;
+      }
+
+      _refreshMedications();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.medicationMarkedAsTaken)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.unableToSaveMedication)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _markingMedicationIndices.remove(index);
+        });
+      }
+    }
+  }
+
+  Future<Medication?> _showAddMedicationSheet() async {
+    return showModalBottomSheet<Medication>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => const _AddMedicationSheet(),
+    );
   }
 
   String _greetingText() {
@@ -310,13 +446,15 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                         : 'Enable notifications',
                     onPressed: () async {
                       final prefs = await SharedPreferences.getInstance();
-                      setState(
-                        () => _notificationsEnabled = !_notificationsEnabled,
-                      );
+                      final nextValue = !_notificationsEnabled;
+                      setState(() {
+                        _notificationsEnabled = nextValue;
+                      });
                       await prefs.setBool(
                         'notifications_enabled',
-                        _notificationsEnabled,
+                        nextValue,
                       );
+                      await _syncNotifications();
                     },
                     icon: Icon(
                       _notificationsEnabled
@@ -409,25 +547,63 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 16),
-                        _medCard(
-                          'Metformin',
-                          '500mg',
-                          '9:00 AM',
-                          Colors.blue.shade100,
-                          Icons.medication,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          Translations.afternoon,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        _medCard(
-                          'Atorvastatin',
-                          '20mg',
-                          '1:00 PM',
-                          Colors.orange.shade100,
-                          Icons.local_hospital,
+                        FutureBuilder<List<Medication>>(
+                          future: _medicationsFuture,
+                          builder: (context, snapshot) {
+                            final theme = Theme.of(context);
+
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const SizedBox(
+                                height: 80,
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+
+                            if (snapshot.hasError) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    Translations.unableToLoadMedications,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.error,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton(
+                                    onPressed: _refreshMedications,
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
+                              );
+                            }
+
+                            final allMedications = snapshot.data ?? <Medication>[];
+                            final activeEntries = <MapEntry<int, Medication>>[];
+                            for (var i = 0; i < allMedications.length; i++) {
+                              final med = allMedications[i];
+                              if (med.isEnabled && !med.isHistoric) {
+                                activeEntries.add(MapEntry(i, med));
+                              }
+                            }
+
+                            if (activeEntries.isEmpty) {
+                              return Text(
+                                Translations.noMedicationsAdded,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              );
+                            }
+
+                            return _buildScheduleSections(
+                              context,
+                              activeEntries,
+                            );
+                          },
                         ),
                         const SizedBox(height: 120), // Space for bottom bar
                       ],
@@ -532,9 +708,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           width: 68, // Slightly larger FAB
           height: 68, // Slightly larger FAB
           child: FloatingActionButton(
-            onPressed: () {
-              // open add drug flow
-            },
+            onPressed: _onAddMedicationPressed,
             elevation: 6,
             backgroundColor: Theme.of(context).colorScheme.primary,
             shape: RoundedRectangleBorder(
@@ -547,18 +721,121 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     );
   }
 
+  Widget _buildScheduleSections(
+    BuildContext context,
+    List<MapEntry<int, Medication>> entries,
+  ) {
+    final sorted = entries.toList()
+      ..sort((a, b) => _compareTimeOfDay(a.value.time, b.value.time));
+
+    final Map<MedicationPeriod, List<MapEntry<int, Medication>>> grouped = {
+      MedicationPeriod.morning: <MapEntry<int, Medication>>[],
+      MedicationPeriod.afternoon: <MapEntry<int, Medication>>[],
+      MedicationPeriod.evening: <MapEntry<int, Medication>>[],
+    };
+
+    for (final entry in sorted) {
+      grouped[entry.value.period]!.add(entry);
+    }
+
+    final sections = grouped.entries
+        .where((entry) => entry.value.isNotEmpty)
+        .toList(growable: false);
+
+    if (sections.isEmpty) {
+      final theme = Theme.of(context);
+      return Text(
+        Translations.noMedicationsAdded,
+        style: TextStyle(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    final List<Widget> children = <Widget>[];
+    for (var i = 0; i < sections.length; i++) {
+      final section = sections[i];
+      children
+        ..add(
+          Text(
+            _labelForPeriod(section.key),
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        )
+        ..add(const SizedBox(height: 8));
+
+      final meds = section.value;
+      for (var j = 0; j < meds.length; j++) {
+        final entry = meds[j];
+        children.add(
+          _medCard(
+            context,
+            entry.value,
+            onMarkTaken: () => _markMedicationTaken(entry.key),
+            isMarking: _markingMedicationIndices.contains(entry.key),
+          ),
+        );
+        if (j < meds.length - 1) {
+          children.add(const SizedBox(height: 12));
+        }
+      }
+
+      if (i < sections.length - 1) {
+        children.add(const SizedBox(height: 24));
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    );
+  }
+
+  Color _badgeColorForPeriod(MedicationPeriod period, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    switch (period) {
+      case MedicationPeriod.morning:
+        return scheme.primaryContainer.withOpacity(0.6);
+      case MedicationPeriod.afternoon:
+        return scheme.secondaryContainer.withOpacity(0.6);
+      case MedicationPeriod.evening:
+        return scheme.tertiaryContainer.withOpacity(0.6);
+    }
+  }
+
+  IconData _iconForPeriod(MedicationPeriod period) {
+    switch (period) {
+      case MedicationPeriod.morning:
+        return Icons.wb_sunny_outlined;
+      case MedicationPeriod.afternoon:
+        return Icons.medication_outlined;
+      case MedicationPeriod.evening:
+        return Icons.nightlight_outlined;
+    }
+  }
+
+  int _compareTimeOfDay(TimeOfDay a, TimeOfDay b) {
+    final aMinutes = a.hour * 60 + a.minute;
+    final bMinutes = b.hour * 60 + b.minute;
+    return aMinutes.compareTo(bMinutes);
+  }
+
   // small card to match the attachment look
   Widget _medCard(
-    String name,
-    String dose,
-    String time,
-    Color bg,
-    IconData leading,
-  ) {
+    BuildContext context,
+    Medication medication, {
+    VoidCallback? onMarkTaken,
+    bool isMarking = false,
+  }) {
+    final theme = Theme.of(context);
+    final badgeColor = _badgeColorForPeriod(medication.period, theme);
+    final badgeIcon = _iconForPeriod(medication.period);
+    final formattedTime = medication.time.format(context);
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -574,10 +851,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
             height: 48,
             width: 48,
             decoration: BoxDecoration(
-              color: bg,
+              color: badgeColor,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(leading, color: Colors.black54),
+            child: Icon(
+              badgeIcon,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -585,34 +865,242 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$name, $dose',
+                  '${medication.name}, ${medication.dose}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  time,
-                  style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  formattedTime,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 13,
+                  ),
                 ),
+                if (medication.notes != null && medication.notes!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      medication.notes!,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
           const SizedBox(width: 8),
           Container(
-            height: 28,
-            width: 28,
+            height: 36,
+            width: 36,
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.check_box_outline_blank,
-              size: 18,
-              color: Colors.grey,
-            ),
+            child: isMarking
+                ? Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        theme.colorScheme.primary,
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: Translations.markMedicationTaken,
+                    padding: EdgeInsets.zero,
+                    icon: Icon(
+                      Icons.check_box_outline_blank,
+                      size: 20,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    onPressed: onMarkTaken,
+                  ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _AddMedicationSheet extends StatefulWidget {
+  const _AddMedicationSheet();
+
+  @override
+  State<_AddMedicationSheet> createState() => _AddMedicationSheetState();
+}
+
+class _AddMedicationSheetState extends State<_AddMedicationSheet> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _doseController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+
+  TimeOfDay? _selectedTime;
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _doseController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedTime = picked;
+        _errorText = null;
+      });
+    }
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final dose = _doseController.text.trim();
+    final notes = _notesController.text.trim();
+
+    if (name.isEmpty || dose.isEmpty || _selectedTime == null) {
+      setState(() {
+        _errorText = Translations.medicationFormIncomplete;
+      });
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    final time = _selectedTime!;
+    final period = _periodForTime(time);
+
+    Navigator.of(context).pop(
+      Medication(
+        name: name,
+        dose: dose,
+        time: time,
+        period: period,
+        notes: notes.isEmpty ? null : notes,
+      ),
+    );
+  }
+
+  MedicationPeriod _periodForTime(TimeOfDay time) {
+    if (time.hour < 12) {
+      return MedicationPeriod.morning;
+    }
+    if (time.hour < 18) {
+      return MedicationPeriod.afternoon;
+    }
+    return MedicationPeriod.evening;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final mediaQuery = MediaQuery.of(context);
+    final timeLabel = _selectedTime != null
+        ? MaterialLocalizations.of(context).formatTimeOfDay(
+            _selectedTime!,
+            alwaysUse24HourFormat: mediaQuery.alwaysUse24HourFormat,
+          )
+        : Translations.selectTime;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              Translations.addDrug,
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: Translations.medicationName,
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _doseController,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: Translations.medicationDose,
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            const SizedBox(height: 12),
+            Text(
+              Translations.usageTime,
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _pickTime,
+              icon: const Icon(Icons.access_time),
+              label: Text(timeLabel),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              decoration: InputDecoration(
+                labelText: Translations.medicationNotesOptional,
+              ),
+              maxLines: 2,
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _errorText!,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: Text(Translations.save),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _labelForPeriod(MedicationPeriod period) {
+  switch (period) {
+    case MedicationPeriod.morning:
+      return Translations.morning;
+    case MedicationPeriod.afternoon:
+      return Translations.afternoon;
+    case MedicationPeriod.evening:
+      return Translations.evening;
   }
 }
 

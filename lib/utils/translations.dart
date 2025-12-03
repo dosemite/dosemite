@@ -225,6 +225,36 @@ class Translations {
     'İyi Akşamlar',
   );
 
+  static String nextMedicationIn(String time) => _getText(
+    'Next medication in $time',
+    'Sonraki ilaç $time içinde',
+  );
+
+  static String get noUpcomingMedications => _getText(
+    'No upcoming medications',
+    'Yaklaşan ilaç yok',
+  );
+
+  static String get lessThanOneMinute => _getText(
+    'Less than a minute',
+    'Bir dakikadan az',
+  );
+
+  static String durationDays(int days) => _getText(
+    days == 1 ? '1 day' : '$days days',
+    '$days gün',
+  );
+
+  static String durationHours(int hours) => _getText(
+    hours == 1 ? '1 hour' : '$hours hours',
+    '$hours saat',
+  );
+
+  static String durationMinutes(int minutes) => _getText(
+    minutes == 1 ? '1 minute' : '$minutes minutes',
+    '$minutes dakika',
+  );
+
   static String get searchMedications => _getText(
     'Search medications...',
     'İlaç ara...',
@@ -285,6 +315,36 @@ class Translations {
     'Zaman seç',
   );
 
+  static String get courseEndDate => _getText(
+    'Course end date',
+    'Tedavinin biteceği tarih',
+  );
+
+  static String get selectCourseEndDate => _getText(
+    'Select end date',
+    'Bitiş tarihi seç',
+  );
+
+  static String get stockOnHand => _getText(
+    'Pills on hand',
+    'Elinizdeki hap sayısı',
+  );
+
+  static String get enterPositiveAmount => _getText(
+    'Enter a positive number',
+    'Pozitif bir sayı girin',
+  );
+
+  static String get courseEndRequired => _getText(
+    'Please select when the course should end.',
+    'Lütfen tedavinin ne zaman biteceğini seçin.',
+  );
+
+  static String get quantityRequired => _getText(
+    'Please tell us how many pills you have.',
+    'Kaç hap kaldığını belirtmelisiniz.',
+  );
+
   static String get medicationNotesOptional => _getText(
     'Notes (optional)',
     'Notlar (isteğe bağlı)',
@@ -325,9 +385,95 @@ class Translations {
     'İlaç alındı olarak işaretlendi',
   );
 
+  static String remainingDoses(int remaining) => _getText(
+        remaining == 1 ? '1 dose remaining' : '$remaining doses remaining',
+        remaining == 1 ? '1 doz kaldı' : '$remaining doz kaldı',
+      );
+
+  static String get courseCompleted => _getText(
+    'Course completed',
+    'Tedavi tamamlandı',
+  );
+
+  static String courseEndsOn(String date) => _getText(
+    'Ends on $date',
+    '$date tarihinde biter',
+  );
+
+  static String lowStockMessage(String name, int remaining) => _getText(
+    '$name is running low. Only $remaining left.',
+    '$name için stok azalıyor. Sadece $remaining kaldı.',
+  );
+
+  static String get pleaseRestockSoon => _getText(
+    'Please restock soon.',
+    'Lütfen yakında stoklayın.',
+  );
+
+  static String get lowStockWarning => _getText(
+    'Low stock alert',
+    'Düşük stok uyarısı',
+  );
+
   static String get noHistoryYet => _getText(
     'No medication history yet.',
     'Henüz ilaç geçmişi yok.',
+  );
+
+  static String get tapMedicationForHistory => _getText(
+    'Tap a medication to see its intake history.',
+    'Alım geçmişini görmek için bir ilaca dokunun.',
+  );
+
+  static String get noDosesLogged => _getText(
+    'No doses logged yet.',
+    'Henüz doz kaydı yok.',
+  );
+
+  // Backup & Transfer
+  static String get backupAndTransfer => _getText(
+    'Backup & Transfer',
+    'Yedekleme ve Aktarım',
+  );
+
+  static String get backupViaQr => _getText(
+    'Show backup QR code',
+    'Yedekleme QR kodu göster',
+  );
+
+  static String get backupViaQrSubtitle => _getText(
+    'Scan this code on another device to copy your data.',
+    'Verilerinizi kopyalamak için başka bir cihazda tarayın.',
+  );
+
+  static String get restoreFromQr => _getText(
+    'Restore from QR code',
+    'QR kodundan geri yükle',
+  );
+
+  static String get restoreFromQrSubtitle => _getText(
+    'Scan a code exported from Dosemite to import data.',
+    'Dosemite üzerinden alınmış kodu tarayarak verileri içe aktarın.',
+  );
+
+  static String get backupFailed => _getText(
+    'Unable to create backup QR code.',
+    'Yedekleme QR kodu oluşturulamadı.',
+  );
+
+  static String get importFailed => _getText(
+    'Could not import data from the QR code.',
+    'QR kodundan veri içe aktarılamadı.',
+  );
+
+  static String get importSuccess => _getText(
+    'Medication list restored.',
+    'İlaç listesi geri yüklendi.',
+  );
+
+  static String get scanningQrInstructions => _getText(
+    'Align the QR code within the frame to scan.',
+    'Taramak için QR kodunu çerçeve içine hizalayın.',
   );
 
   // Settings

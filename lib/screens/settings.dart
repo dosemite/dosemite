@@ -1,8 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../theme/theme_controller.dart';
+
+import '../data/medication_repository.dart';
+import '../models/medication.dart';
+import '../screens/qr_import_screen.dart';
 import '../theme/language_controller.dart';
+import '../theme/theme_controller.dart';
 import '../utils/translations.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -18,12 +25,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppLanguage _selectedLanguage = LanguageController.instance.value;
   final TextEditingController _nameController = TextEditingController();
   String _userName = '';
+  final MedicationRepository _repository = MedicationRepository();
 
   @override
   void initState() {
     super.initState();
     _loadUserName();
     LanguageController.instance.addListener(_onLanguageChanged);
+  }
+
+  Future<void> _showBackupQr() async {
+    try {
+      final medications = await _repository.loadMedications();
+      final payload = jsonEncode(
+        medications.map((med) => med.toJson()).toList(growable: false),
+      );
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(Translations.backupViaQr),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 240,
+                  height: 240,
+                  child: QrImageView(
+                    data: payload,
+                    version: QrVersions.auto,
+                    errorCorrectionLevel: QrErrorCorrectLevel.Q,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  Translations.backupViaQrSubtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(Translations.cancel),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.backupFailed)),
+      );
+    }
+  }
+
+  Future<void> _restoreFromQr() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const QrImportScreen()),
+    );
+    if (result == null || result.isEmpty) {
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(result);
+      if (decoded is! List) {
+        throw const FormatException('Payload is not a list');
+      }
+      final medications = decoded
+          .map((entry) => Medication.fromJson(Map<String, dynamic>.from(entry as Map)))
+          .toList(growable: false);
+      await _repository.saveMedications(medications);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.importSuccess)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.importFailed)),
+      );
+    }
   }
 
   @override
@@ -269,6 +357,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: Text(Translations.viewOnGitHub),
             trailing: const Icon(Icons.open_in_new),
             onTap: _openGitHub,
+          ),
+
+          const Divider(),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(Translations.backupAndTransfer, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.qr_code_2),
+            title: Text(Translations.backupViaQr),
+            subtitle: Text(Translations.backupViaQrSubtitle),
+            onTap: _showBackupQr,
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.qr_code_scanner),
+            title: Text(Translations.restoreFromQr),
+            subtitle: Text(Translations.restoreFromQrSubtitle),
+            onTap: _restoreFromQr,
           ),
 
           const SizedBox(height: 20),

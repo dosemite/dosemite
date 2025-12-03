@@ -240,7 +240,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     _medicationsFuture = future;
     future
         .then((medications) {
-          _latestMedications = medications;
+          if (mounted) {
+            setState(() {
+              _latestMedications = medications;
+            });
+          } else {
+            _latestMedications = medications;
+          }
           return _syncNotifications(medications: medications);
         })
         .catchError((_) {});
@@ -253,7 +259,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     });
     future
         .then((medications) {
-          _latestMedications = medications;
+          if (mounted) {
+            setState(() {
+              _latestMedications = medications;
+            });
+          } else {
+            _latestMedications = medications;
+          }
           return _syncNotifications(medications: medications);
         })
         .catchError((_) {});
@@ -264,7 +276,13 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     if (meds == null) {
       try {
         final latest = await _medicationRepository.loadMedications();
-        _latestMedications = latest;
+        if (mounted) {
+          setState(() {
+            _latestMedications = latest;
+          });
+        } else {
+          _latestMedications = latest;
+        }
         await NotificationService.instance.syncMedications(
           latest,
           notificationsEnabled: _notificationsEnabled,
@@ -322,10 +340,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         return;
       }
 
-      final updatedMedication = medications[index].copyWith(
-        isHistoric: true,
-        isEnabled: false,
-      );
+      final updatedMedication = medications[index].recordIntake(DateTime.now());
 
       medications[index] = updatedMedication;
       await _medicationRepository.saveMedications(medications);
@@ -335,8 +350,20 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       }
 
       _refreshMedications();
+      final remaining = updatedMedication.remainingQuantity;
+      final parts = <String>[Translations.medicationMarkedAsTaken];
+      if (remaining != null) {
+        parts.add(Translations.remainingDoses(remaining));
+      }
+      if (updatedMedication.isHistoric) {
+        parts.add(Translations.courseCompleted);
+      } else if (updatedMedication.hasLowStock && remaining != null) {
+        parts.add(
+          Translations.lowStockMessage(updatedMedication.name, remaining),
+        );
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(Translations.medicationMarkedAsTaken)),
+        SnackBar(content: Text(parts.join(' • '))),
       );
     } catch (error) {
       if (!mounted) return;
@@ -370,9 +397,88 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     return prefix;
   }
 
+  String _nextMedicationMessage() {
+    final meds = _latestMedications;
+    if (meds == null || meds.isEmpty) {
+      return Translations.noUpcomingMedications;
+    }
+
+    final now = DateTime.now();
+    Duration? soonestDiff;
+
+    for (final med in meds) {
+      if (!med.isCourseActive) {
+        continue;
+      }
+
+      final nextOccurrence = _nextOccurrenceFor(med.time, now);
+      var diff = nextOccurrence.difference(now);
+      if (diff.isNegative) {
+        diff = Duration.zero;
+      }
+
+      if (soonestDiff == null || diff < soonestDiff) {
+        soonestDiff = diff;
+      }
+    }
+
+    if (soonestDiff == null) {
+      return Translations.noUpcomingMedications;
+    }
+
+  final formatted = _formatDuration(soonestDiff);
+    return Translations.nextMedicationIn(formatted);
+  }
+
+  DateTime _nextOccurrenceFor(TimeOfDay time, DateTime reference) {
+    final candidate = DateTime(
+      reference.year,
+      reference.month,
+      reference.day,
+      time.hour,
+      time.minute,
+    );
+
+    if (candidate.isAfter(reference) || candidate.isAtSameMomentAs(reference)) {
+      return candidate;
+    }
+
+    return candidate.add(const Duration(days: 1));
+  }
+
+  String _formatDuration(Duration duration) {
+    if (duration.inMinutes < 1) {
+      return Translations.lessThanOneMinute;
+    }
+
+    final days = duration.inDays;
+    final hours = duration.inHours % 24;
+    final minutes = duration.inMinutes % 60;
+
+    final parts = <String>[];
+
+    if (days > 0) {
+      parts.add(Translations.durationDays(days));
+    }
+    if (hours > 0) {
+      parts.add(Translations.durationHours(hours));
+    }
+    if (minutes > 0 && parts.length < 2) {
+      parts.add(Translations.durationMinutes(minutes));
+    }
+
+    if (parts.isEmpty) {
+      return Translations.lessThanOneMinute;
+    }
+
+    return parts.join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final lowSupplyMeds =
+        _selectedIndex == 0 ? _lowSupplyMedicationsForUi() : const <Medication>[];
 
     return Scaffold(
       // We use a custom top area instead of AppBar to match the expressive layout
@@ -520,6 +626,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                   ],
                 ),
               ),
+            if (_selectedIndex == 0 && lowSupplyMeds.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: _LowSupplyBanner(medications: lowSupplyMeds),
+              ),
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -538,7 +649,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _greetingText(),
+                          _nextMedicationMessage(),
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 24),
@@ -585,7 +696,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                             final activeEntries = <MapEntry<int, Medication>>[];
                             for (var i = 0; i < allMedications.length; i++) {
                               final med = allMedications[i];
-                              if (med.isEnabled && !med.isHistoric) {
+                              if (med.isCourseActive) {
                                 activeEntries.add(MapEntry(i, med));
                               }
                             }
@@ -719,6 +830,16 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
         ),
       ),
     );
+  }
+
+  List<Medication> _lowSupplyMedicationsForUi() {
+    final meds = _latestMedications;
+    if (meds == null) {
+      return const <Medication>[];
+    }
+    return meds
+        .where((med) => med.hasLowStock && med.isCourseActive)
+        .toList(growable: false);
   }
 
   Widget _buildScheduleSections(
@@ -936,8 +1057,10 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _doseController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _quantityController = TextEditingController();
 
   TimeOfDay? _selectedTime;
+  DateTime? _courseEndDate;
   String? _errorText;
 
   @override
@@ -945,6 +1068,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
     _nameController.dispose();
     _doseController.dispose();
     _notesController.dispose();
+    _quantityController.dispose();
     super.dispose();
   }
 
@@ -961,10 +1085,29 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
     }
   }
 
+  Future<void> _pickCourseEndDate() async {
+    final now = DateTime.now();
+    final initialDate = _courseEndDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 5)),
+      initialDate: initialDate,
+    );
+    if (picked != null) {
+      setState(() {
+        _courseEndDate = DateTime(picked.year, picked.month, picked.day);
+        _errorText = null;
+      });
+    }
+  }
+
   void _submit() {
     final name = _nameController.text.trim();
     final dose = _doseController.text.trim();
     final notes = _notesController.text.trim();
+    final quantityText = _quantityController.text.trim();
+    final parsedQuantity = int.tryParse(quantityText);
 
     if (name.isEmpty || dose.isEmpty || _selectedTime == null) {
       setState(() {
@@ -973,9 +1116,31 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
       return;
     }
 
+    if (_courseEndDate == null) {
+      setState(() {
+        _errorText = Translations.courseEndRequired;
+      });
+      return;
+    }
+
+    if (parsedQuantity == null || parsedQuantity <= 0) {
+      setState(() {
+        _errorText = Translations.quantityRequired;
+      });
+      return;
+    }
+
     FocusScope.of(context).unfocus();
     final time = _selectedTime!;
     final period = _periodForTime(time);
+    final courseEnd = DateTime(
+      _courseEndDate!.year,
+      _courseEndDate!.month,
+      _courseEndDate!.day,
+      23,
+      59,
+      59,
+    );
 
     Navigator.of(context).pop(
       Medication(
@@ -984,6 +1149,10 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
         time: time,
         period: period,
         notes: notes.isEmpty ? null : notes,
+        courseEndDate: courseEnd,
+        totalQuantity: parsedQuantity,
+        remainingQuantity: parsedQuantity,
+        intakeHistory: const <DateTime>[],
       ),
     );
   }
@@ -1062,6 +1231,38 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
               onPressed: _pickTime,
               icon: const Icon(Icons.access_time),
               label: Text(timeLabel),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              Translations.courseEndDate,
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _pickCourseEndDate,
+              icon: const Icon(Icons.event),
+              label: Text(
+                _courseEndDate != null
+                    ? MaterialLocalizations.of(context)
+                        .formatFullDate(_courseEndDate!)
+                    : Translations.selectCourseEndDate,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _quantityController,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: Translations.stockOnHand,
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
             ),
             const SizedBox(height: 12),
             TextField(
@@ -1193,6 +1394,62 @@ class _BottomNavTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _LowSupplyBanner extends StatelessWidget {
+  const _LowSupplyBanner({required this.medications});
+
+  final List<Medication> medications;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textColor = theme.colorScheme.onPrimaryContainer;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            Translations.lowStockWarning,
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < medications.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == medications.length - 1 ? 0 : 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: textColor, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${Translations.lowStockMessage(
+                        medications[i].name,
+                        medications[i].remainingQuantity ?? 0,
+                      )} ${Translations.pleaseRestockSoon}',
+                      style: TextStyle(
+                        color: textColor,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

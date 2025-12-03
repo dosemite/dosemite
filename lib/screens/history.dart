@@ -61,14 +61,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             );
           }
 
-          final history = (snapshot.data ?? <Medication>[])
-              .where((med) => med.isHistoric)
-              .toList()
-            ..sort((a, b) => _compareTimeDesc(a.time, b.time));
+          final medications = (snapshot.data ?? <Medication>[]).toList()
+            ..sort(_compareMedicationHistory);
 
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: history.isEmpty
+            child: medications.isEmpty
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: [
@@ -85,13 +83,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ],
                   )
-                : ListView.separated(
+                : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
-                    itemCount: history.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemCount: medications.length + 1,
                     itemBuilder: (context, index) {
-                      return _HistoryTile(medication: history[index]);
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            Translations.tapMedicationForHistory,
+                            style: TextStyle(
+                              color:
+                                  Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      }
+                      return _MedicationHistoryTile(
+                        medication: medications[index - 1],
+                      );
                     },
                   ),
           );
@@ -101,21 +112,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({required this.medication});
+class _MedicationHistoryTile extends StatelessWidget {
+  const _MedicationHistoryTile({required this.medication});
 
   final Medication medication;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final subtitle = '${medication.dose} • ${medication.time.format(context)} • ${_labelForPeriod(medication.period)}';
+    final subtitleParts = <String>[
+      '${medication.dose} • ${medication.time.format(context)}',
+      _labelForPeriod(medication.period),
+    ];
+    if (medication.remainingQuantity != null) {
+      subtitleParts.add(Translations.remainingDoses(medication.remainingQuantity!));
+    }
+    if (medication.courseEndDate != null) {
+      final dateLabel =
+          MaterialLocalizations.of(context).formatFullDate(medication.courseEndDate!);
+      subtitleParts.add(Translations.courseEndsOn(dateLabel));
+    }
+
+    final entries = medication.intakeHistory.toList()
+      ..sort((a, b) => b.compareTo(a));
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.03),
@@ -124,62 +149,57 @@ class _HistoryTile extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: theme.colorScheme.primaryContainer,
-            child: Text(
-              medication.name.isNotEmpty
-                  ? medication.name[0].toUpperCase()
-                  : '?',
-              style: TextStyle(
-                color: theme.colorScheme.onPrimaryContainer,
-                fontWeight: FontWeight.w600,
-              ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        childrenPadding: const EdgeInsets.only(bottom: 12),
+        title: Text(
+          medication.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            subtitleParts.join(' • '),
+            style: TextStyle(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontSize: 13,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  medication.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        children: entries.isEmpty
+            ? [
+                ListTile(
+                  title: Text(Translations.noDosesLogged),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 13,
+              ]
+            : entries
+                .map(
+                  (entry) => ListTile(
+                    leading: const Icon(Icons.check_circle_outline),
+                    title: Text(_formatHistoryTimestamp(context, entry)),
                   ),
-                ),
-                if (medication.notes != null && medication.notes!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      medication.notes!,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const Icon(Icons.check_circle, color: Colors.green),
-        ],
+                )
+                .toList(growable: false),
       ),
     );
   }
 }
 
-int _compareTimeDesc(TimeOfDay a, TimeOfDay b) {
-  final aMinutes = a.hour * 60 + a.minute;
-  final bMinutes = b.hour * 60 + b.minute;
-  return bMinutes.compareTo(aMinutes);
+int _compareMedicationHistory(Medication a, Medication b) {
+  final aLast = a.lastIntake ?? a.createdAt;
+  final bLast = b.lastIntake ?? b.createdAt;
+  final cmp = bLast.compareTo(aLast);
+  if (cmp != 0) {
+    return cmp;
+  }
+  return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+}
+
+String _formatHistoryTimestamp(BuildContext context, DateTime time) {
+  final localizations = MaterialLocalizations.of(context);
+  final date = localizations.formatFullDate(time);
+  final formattedTime = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(time));
+  return '$date • $formattedTime';
 }
 
 String _labelForPeriod(MedicationPeriod period) {

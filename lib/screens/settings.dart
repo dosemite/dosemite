@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/medication_repository.dart';
 import '../models/medication.dart';
 import '../screens/qr_import_screen.dart';
+import '../services/notification_service.dart';
 import '../theme/language_controller.dart';
 import '../theme/theme_controller.dart';
 import '../utils/translations.dart';
@@ -26,6 +27,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _nameController = TextEditingController();
   String _userName = '';
   final MedicationRepository _repository = MedicationRepository();
+
+  // Debug menu access
+  int _aboutClickCount = 0;
+  bool _debugMenuVisible = false;
 
   @override
   void initState() {
@@ -79,16 +84,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(Translations.backupFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(Translations.backupFailed)));
     }
   }
 
   Future<void> _restoreFromQr() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const QrImportScreen()),
-    );
+    final result = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrImportScreen()));
     if (result == null || result.isEmpty) {
       return;
     }
@@ -99,18 +104,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         throw const FormatException('Payload is not a list');
       }
       final medications = decoded
-          .map((entry) => Medication.fromJson(Map<String, dynamic>.from(entry as Map)))
+          .map(
+            (entry) =>
+                Medication.fromJson(Map<String, dynamic>.from(entry as Map)),
+          )
           .toList(growable: false);
       await _repository.saveMedications(medications);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(Translations.importSuccess)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(Translations.importSuccess)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(Translations.importFailed)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(Translations.importFailed)));
     }
   }
 
@@ -145,19 +153,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _userName = finalName;
     });
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(Translations.usernameUpdated)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(Translations.usernameUpdated)));
     }
   }
 
   Future<void> _openGitHub() async {
     final url = Uri.parse('https://github.com/dosemite/dosemite');
     try {
-      if (!await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication,
-      )) {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
         throw Exception('Could not launch $url');
       }
     } catch (e) {
@@ -182,7 +187,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Account section
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(Translations.account, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              Translations.account,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
 
           ListTile(
@@ -229,7 +237,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Language section
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(Translations.language, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              Translations.language,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
 
           ListTile(
@@ -250,14 +261,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           leading: _selectedLanguage == AppLanguage.english
                               ? const Icon(Icons.check)
                               : null,
-                          onTap: () => Navigator.pop(context, AppLanguage.english),
+                          onTap: () =>
+                              Navigator.pop(context, AppLanguage.english),
                         ),
                         ListTile(
                           title: Text(Translations.turkish),
                           leading: _selectedLanguage == AppLanguage.turkish
                               ? const Icon(Icons.check)
                               : null,
-                          onTap: () => Navigator.pop(context, AppLanguage.turkish),
+                          onTap: () =>
+                              Navigator.pop(context, AppLanguage.turkish),
                         ),
                         const SizedBox(height: 8),
                       ],
@@ -277,7 +290,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Appearance section
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(Translations.appearance, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              Translations.appearance,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
 
           // Selected mode tile: opens modal to choose between White, Gray/Black, Pitch Black
@@ -299,7 +315,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         ListTile(
                           title: Text(Translations.grayBlack),
-                          onTap: () => Navigator.pop(context, AppTheme.darkGray),
+                          onTap: () =>
+                              Navigator.pop(context, AppTheme.darkGray),
                         ),
                         ListTile(
                           title: Text(Translations.pitchAmoledBlack),
@@ -341,14 +358,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // About section
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(Translations.about, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              Translations.about,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
 
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: Text(Translations.aboutDoseMite),
             subtitle: Text(Translations.version),
-            onTap: () {},
+            onTap: () {
+              setState(() {
+                _aboutClickCount++;
+                if (_aboutClickCount >= 3 && !_debugMenuVisible) {
+                  _debugMenuVisible = true;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Debug menu unlocked'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              });
+            },
           ),
 
           ListTile(
@@ -363,7 +396,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8.0),
-            child: Text(Translations.backupAndTransfer, style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              Translations.backupAndTransfer,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
 
           ListTile(
@@ -376,9 +412,137 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ListTile(
             leading: const Icon(Icons.qr_code_scanner),
             title: Text(Translations.restoreFromQr),
-            subtitle: Text(Translations.restoreFromQrSubtitle),
             onTap: _restoreFromQr,
           ),
+
+          // Debug section - only visible after 3 clicks on About DoseMite
+          if (_debugMenuVisible) ...[
+            const Divider(),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'Debug',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.notifications_active),
+              title: const Text('Test Notification'),
+              subtitle: const Text('Send an immediate test notification'),
+              onTap: () async {
+                final success = await NotificationService.instance
+                    .showTestNotification();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? 'Test notification sent! Check your notifications.'
+                          : 'Failed to send test notification.',
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.schedule),
+              title: const Text('Test Scheduled (10 sec)'),
+              subtitle: const Text(
+                'Schedule a notification for 10 seconds from now',
+              ),
+              onTap: () async {
+                final result = await NotificationService.instance
+                    .showScheduledTestNotification();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(result),
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.access_time),
+              title: const Text('Fix Timezone'),
+              subtitle: const Text(
+                'Re-detect timezone and reschedule notifications',
+              ),
+              onTap: () async {
+                final result = await NotificationService.instance
+                    .forceReinitializeTimezone();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(result),
+                    duration: const Duration(seconds: 5),
+                  ),
+                );
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(Icons.bug_report),
+              title: const Text('Notification Diagnostics'),
+              subtitle: const Text('View notification system status'),
+              onTap: () async {
+                final diagnostics = await NotificationService.instance
+                    .getDiagnostics();
+                if (!mounted) return;
+                await showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Notification Diagnostics'),
+                    content: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: diagnostics.entries.map((entry) {
+                          final value = entry.value;
+                          final valueStr = value is List
+                              ? value.join('\n')
+                              : value.toString();
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.key,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  valueStr,
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
 
           const SizedBox(height: 20),
         ],

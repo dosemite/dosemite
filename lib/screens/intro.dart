@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/cloud_backup_service.dart';
 import '../theme/theme_controller.dart';
 import '../theme/language_controller.dart';
 import '../utils/translations.dart';
@@ -31,12 +32,18 @@ class _IntroScreenState extends State<IntroScreen> {
   bool _requestingNotificationPermission = false;
   AppLanguage _selectedLanguage = LanguageController.instance.value;
 
+  // Cloud sync state
+  final TextEditingController _backupKeyController = TextEditingController();
+  bool _isRestoring = false;
+  String? _restoreError;
+  bool _hasRestoredFromCloud = false;
+
   @override
   void initState() {
     super.initState();
     LanguageController.instance.loadFromPrefs();
     LanguageController.instance.addListener(_onLanguageChanged);
-    
+
     // Uygulama ilk açıldığında sistem temasını kontrol et
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final brightness = MediaQuery.of(context).platformBrightness;
@@ -60,13 +67,13 @@ class _IntroScreenState extends State<IntroScreen> {
     LanguageController.instance.removeListener(_onLanguageChanged);
     _pageController.dispose();
     _nameController.dispose();
+    _backupKeyController.dispose();
     _nameFocusNode.dispose();
     super.dispose();
   }
 
-  Permission get _locationPermission => Platform.isIOS
-      ? Permission.locationWhenInUse
-      : Permission.location;
+  Permission get _locationPermission =>
+      Platform.isIOS ? Permission.locationWhenInUse : Permission.location;
 
   bool _isLocationAuthorized(PermissionStatus status) =>
       status.isGranted || status.isLimited;
@@ -149,7 +156,9 @@ class _IntroScreenState extends State<IntroScreen> {
     final brightness = MediaQuery.of(ctx).platformBrightness;
     AppTheme applyTheme = _selected;
     if (_followSystem) {
-      applyTheme = (brightness == Brightness.dark) ? AppTheme.darkGray : AppTheme.light;
+      applyTheme = (brightness == Brightness.dark)
+          ? AppTheme.darkGray
+          : AppTheme.light;
       // Sistem temasını kaydet
       ThemeController.instance.setTheme(applyTheme);
     }
@@ -160,16 +169,27 @@ class _IntroScreenState extends State<IntroScreen> {
     // Persist some simple prefs (name, notifications, and language)
     // Use "user" as default name if empty
     final userName = _nameController.text.trim();
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setString('user_name', userName.isEmpty ? 'user' : userName);
-      prefs.setBool('notifications_enabled', _notifications);
-    });
-    
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user_name', userName.isEmpty ? 'user' : userName);
+    await prefs.setBool('notifications_enabled', _notifications);
+
     // Save language preference
     LanguageController.instance.setLanguage(_selectedLanguage);
 
     // mark intro seen (async, don't await to avoid context-after-async)
     ThemeController.setSeenIntro();
+
+    // If user didn't restore from cloud, create initial backup to generate their key
+    if (!_hasRestoredFromCloud) {
+      // Do this in background, don't block navigation
+      CloudBackupService.instance.backupToCloud().then((key) {
+        if (key != null) {
+          debugPrint(
+            'CloudBackupService: Initial backup created with key: $key',
+          );
+        }
+      });
+    }
 
     // navigate to main dashboard immediately using provided context
     if (widget.onGetStarted != null) {
@@ -192,12 +212,18 @@ class _IntroScreenState extends State<IntroScreen> {
                 color: theme.colorScheme.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(28),
               ),
-              child: Icon(Icons.local_pharmacy_outlined, size: 60, color: theme.colorScheme.primary),
+              child: Icon(
+                Icons.local_pharmacy_outlined,
+                size: 60,
+                color: theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(height: 32),
             Text(
               Translations.welcomeTitle,
-              style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
@@ -209,7 +235,7 @@ class _IntroScreenState extends State<IntroScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 40),
-            
+
             // Language selection
             Card(
               elevation: 0,
@@ -225,15 +251,23 @@ class _IntroScreenState extends State<IntroScreen> {
                           children: [
                             GestureDetector(
                               behavior: HitTestBehavior.opaque,
-                              onTap: () => Navigator.pop(context, AppLanguage.english),
+                              onTap: () =>
+                                  Navigator.pop(context, AppLanguage.english),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
                                 child: Row(
                                   children: [
-                                    if (_selectedLanguage == AppLanguage.english)
+                                    if (_selectedLanguage ==
+                                        AppLanguage.english)
                                       const Icon(Icons.check, size: 24),
                                     const SizedBox(width: 24),
-                                    Text(Translations.english, style: const TextStyle(fontSize: 16)),
+                                    Text(
+                                      Translations.english,
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -241,15 +275,23 @@ class _IntroScreenState extends State<IntroScreen> {
                             const Divider(height: 1),
                             GestureDetector(
                               behavior: HitTestBehavior.opaque,
-                              onTap: () => Navigator.pop(context, AppLanguage.turkish),
+                              onTap: () =>
+                                  Navigator.pop(context, AppLanguage.turkish),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
                                 child: Row(
                                   children: [
-                                    if (_selectedLanguage == AppLanguage.turkish)
+                                    if (_selectedLanguage ==
+                                        AppLanguage.turkish)
                                       const Icon(Icons.check, size: 24),
                                     const SizedBox(width: 24),
-                                    Text(Translations.turkish, style: const TextStyle(fontSize: 16)),
+                                    Text(
+                                      Translations.turkish,
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -270,7 +312,10 @@ class _IntroScreenState extends State<IntroScreen> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 16,
+                  ),
                   child: Row(
                     children: [
                       const Icon(Icons.language_outlined),
@@ -279,11 +324,14 @@ class _IntroScreenState extends State<IntroScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(Translations.language, style: Theme.of(context).textTheme.bodyLarge),
+                            Text(
+                              Translations.language,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
                             const SizedBox(height: 2),
                             Text(
-                              _selectedLanguage == AppLanguage.english 
-                                  ? Translations.english 
+                              _selectedLanguage == AppLanguage.english
+                                  ? Translations.english
                                   : Translations.turkish,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
@@ -293,6 +341,258 @@ class _IntroScreenState extends State<IntroScreen> {
                       const Icon(Icons.arrow_drop_down, size: 24),
                     ],
                   ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _restoreFromCloud() async {
+    final key = _backupKeyController.text.trim().toUpperCase();
+    if (key.isEmpty || key.length < 8) {
+      setState(() {
+        _restoreError = Translations.invalidKey;
+      });
+      return;
+    }
+
+    setState(() {
+      _isRestoring = true;
+      _restoreError = null;
+    });
+
+    try {
+      final success = await CloudBackupService.instance.restoreFromCloud(key);
+
+      if (!mounted) return;
+
+      if (success) {
+        // Load the restored username into the controller
+        final prefs = await SharedPreferences.getInstance();
+        final restoredName = prefs.getString('user_name') ?? '';
+        _nameController.text = restoredName;
+
+        setState(() {
+          _isRestoring = false;
+          _hasRestoredFromCloud = true;
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(Translations.restoreSuccess),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
+
+        // Move to next page
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        setState(() {
+          _isRestoring = false;
+          _restoreError = Translations.invalidKey;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isRestoring = false;
+        _restoreError = Translations.cloudBackupFailed;
+      });
+    }
+  }
+
+  Widget _buildCloudSyncPage() {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              height: 100,
+              width: 100,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                Icons.cloud_sync_outlined,
+                size: 50,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 32),
+            Text(
+              Translations.cloudBackup,
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              Translations.cloudSyncDescription,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 40),
+
+            // Restore from backup card
+            Card(
+              elevation: 0,
+              color: theme.colorScheme.primaryContainer.withOpacity(0.3),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.cloud_download_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            Translations.restoreFromCloud,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      Translations.enterBackupKey,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _backupKeyController,
+                      textCapitalization: TextCapitalization.characters,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 20,
+                        letterSpacing: 3,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        hintText: 'XXXXXXXX',
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.3),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        prefixIcon: const Icon(Icons.key),
+                        errorText: _restoreError,
+                      ),
+                      maxLength: 8,
+                      onChanged: (_) {
+                        if (_restoreError != null) {
+                          setState(() => _restoreError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _isRestoring ? null : _restoreFromCloud,
+                        icon: _isRestoring
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.cloud_download),
+                        label: Text(
+                          _isRestoring
+                              ? Translations.restoring
+                              : Translations.restore,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Divider with "or"
+            Row(
+              children: [
+                Expanded(child: Divider(color: theme.colorScheme.outline)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    Translations.or,
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
+                  ),
+                ),
+                Expanded(child: Divider(color: theme.colorScheme.outline)),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // New account info
+            Card(
+              elevation: 0,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.person_add_outlined,
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            Translations.newUser,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            Translations.newUserDescription,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.6,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, size: 16),
+                  ],
                 ),
               ),
             ),
@@ -316,7 +616,11 @@ class _IntroScreenState extends State<IntroScreen> {
                 color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(Icons.person_outline, size: 40, color: Theme.of(context).colorScheme.primary),
+              child: Icon(
+                Icons.person_outline,
+                size: 40,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
             const SizedBox(height: 32),
             Text(
@@ -339,9 +643,13 @@ class _IntroScreenState extends State<IntroScreen> {
               autofocus: false,
               decoration: InputDecoration(
                 hintText: Translations.yourName,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                fillColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
               ),
             ),
           ],
@@ -365,7 +673,11 @@ class _IntroScreenState extends State<IntroScreen> {
                 color: theme.colorScheme.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(Icons.palette_outlined, size: 40, color: theme.colorScheme.primary),
+              child: Icon(
+                Icons.palette_outlined,
+                size: 40,
+                color: theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(height: 32),
             Text(
@@ -374,7 +686,7 @@ class _IntroScreenState extends State<IntroScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 40),
-            
+
             // Follow system theme
             Card(
               elevation: 0,
@@ -384,8 +696,12 @@ class _IntroScreenState extends State<IntroScreen> {
                   setState(() {
                     _followSystem = !_followSystem;
                     if (_followSystem) {
-                      final brightness = MediaQuery.of(context).platformBrightness;
-                      final apply = (brightness == Brightness.dark) ? AppTheme.darkGray : AppTheme.light;
+                      final brightness = MediaQuery.of(
+                        context,
+                      ).platformBrightness;
+                      final apply = (brightness == Brightness.dark)
+                          ? AppTheme.darkGray
+                          : AppTheme.light;
                       ThemeController.instance.setTheme(apply);
                     } else {
                       ThemeController.instance.setTheme(_selected);
@@ -393,7 +709,10 @@ class _IntroScreenState extends State<IntroScreen> {
                   });
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 16,
+                  ),
                   child: Row(
                     children: [
                       Checkbox(
@@ -402,8 +721,12 @@ class _IntroScreenState extends State<IntroScreen> {
                           setState(() {
                             _followSystem = v ?? true;
                             if (_followSystem) {
-                              final brightness = MediaQuery.of(context).platformBrightness;
-                              final apply = (brightness == Brightness.dark) ? AppTheme.darkGray : AppTheme.light;
+                              final brightness = MediaQuery.of(
+                                context,
+                              ).platformBrightness;
+                              final apply = (brightness == Brightness.dark)
+                                  ? AppTheme.darkGray
+                                  : AppTheme.light;
                               ThemeController.instance.setTheme(apply);
                             } else {
                               ThemeController.instance.setTheme(_selected);
@@ -418,7 +741,7 @@ class _IntroScreenState extends State<IntroScreen> {
                 ),
               ),
             ),
-            
+
             if (!_followSystem) ...[
               const SizedBox(height: 20),
               Wrap(
@@ -426,15 +749,27 @@ class _IntroScreenState extends State<IntroScreen> {
                 runSpacing: 12,
                 alignment: WrapAlignment.center,
                 children: [
-                _buildThemeOption(Translations.white, AppTheme.light, Icons.light_mode_outlined),
-                _buildThemeOption(Translations.darkGray, AppTheme.darkGray, Icons.dark_mode_outlined),
-                _buildThemeOption(Translations.amoled, AppTheme.amoled, Icons.contrast_outlined),
+                  _buildThemeOption(
+                    Translations.white,
+                    AppTheme.light,
+                    Icons.light_mode_outlined,
+                  ),
+                  _buildThemeOption(
+                    Translations.darkGray,
+                    AppTheme.darkGray,
+                    Icons.dark_mode_outlined,
+                  ),
+                  _buildThemeOption(
+                    Translations.amoled,
+                    AppTheme.amoled,
+                    Icons.contrast_outlined,
+                  ),
                 ],
               ),
             ],
-            
+
             const SizedBox(height: 32),
-            
+
             // Material You toggle
             Card(
               elevation: 0,
@@ -445,8 +780,12 @@ class _IntroScreenState extends State<IntroScreen> {
                     _materialYou = !_materialYou;
                     ThemeController.instance.setMaterialYou(_materialYou);
                     if (_followSystem) {
-                      final brightness = MediaQuery.of(context).platformBrightness;
-                      final apply = (brightness == Brightness.dark) ? AppTheme.darkGray : AppTheme.light;
+                      final brightness = MediaQuery.of(
+                        context,
+                      ).platformBrightness;
+                      final apply = (brightness == Brightness.dark)
+                          ? AppTheme.darkGray
+                          : AppTheme.light;
                       ThemeController.instance.setTheme(apply);
                     } else {
                       ThemeController.instance.setTheme(_selected);
@@ -454,14 +793,20 @@ class _IntroScreenState extends State<IntroScreen> {
                   });
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 16,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(Translations.materialYou, style: Theme.of(context).textTheme.bodyLarge),
+                            Text(
+                              Translations.materialYou,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
                             const SizedBox(height: 2),
                             Text(
                               Translations.dynamicColorScheme,
@@ -475,10 +820,16 @@ class _IntroScreenState extends State<IntroScreen> {
                         onChanged: (v) {
                           setState(() {
                             _materialYou = v;
-                            ThemeController.instance.setMaterialYou(_materialYou);
+                            ThemeController.instance.setMaterialYou(
+                              _materialYou,
+                            );
                             if (_followSystem) {
-                              final brightness = MediaQuery.of(context).platformBrightness;
-                              final apply = (brightness == Brightness.dark) ? AppTheme.darkGray : AppTheme.light;
+                              final brightness = MediaQuery.of(
+                                context,
+                              ).platformBrightness;
+                              final apply = (brightness == Brightness.dark)
+                                  ? AppTheme.darkGray
+                                  : AppTheme.light;
                               ThemeController.instance.setTheme(apply);
                             } else {
                               ThemeController.instance.setTheme(_selected);
@@ -500,7 +851,7 @@ class _IntroScreenState extends State<IntroScreen> {
   Widget _buildThemeOption(String label, AppTheme theme, IconData icon) {
     final isSelected = _selected == theme;
     final color = Theme.of(context).colorScheme;
-    
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
@@ -515,7 +866,9 @@ class _IntroScreenState extends State<IntroScreen> {
           width: 100,
           height: 120,
           decoration: BoxDecoration(
-            color: isSelected ? color.primaryContainer : color.surfaceContainerHighest,
+            color: isSelected
+                ? color.primaryContainer
+                : color.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isSelected ? color.primary : Colors.transparent,
@@ -525,13 +878,19 @@ class _IntroScreenState extends State<IntroScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 32, color: isSelected ? color.onPrimaryContainer : color.onSurface),
+              Icon(
+                icon,
+                size: 32,
+                color: isSelected ? color.onPrimaryContainer : color.onSurface,
+              ),
               const SizedBox(height: 12),
               Text(
                 label,
                 style: TextStyle(
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                  color: isSelected ? color.onPrimaryContainer : color.onSurface,
+                  color: isSelected
+                      ? color.onPrimaryContainer
+                      : color.onSurface,
                 ),
               ),
             ],
@@ -544,9 +903,10 @@ class _IntroScreenState extends State<IntroScreen> {
   Widget _buildPermissionsPage() {
     final theme = Theme.of(context);
     final notificationsRequired = _notifications;
-    final allPermissionsGranted = _locationPermissionGranted &&
+    final allPermissionsGranted =
+        _locationPermissionGranted &&
         (!notificationsRequired || _notificationPermissionGranted);
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
       child: Column(
@@ -559,7 +919,11 @@ class _IntroScreenState extends State<IntroScreen> {
               color: theme.colorScheme.primary.withOpacity(0.12),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(Icons.lock_outline, size: 40, color: theme.colorScheme.primary),
+            child: Icon(
+              Icons.lock_outline,
+              size: 40,
+              color: theme.colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 32),
           Text(
@@ -576,7 +940,7 @@ class _IntroScreenState extends State<IntroScreen> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 40),
-          
+
           Card(
             elevation: 0,
             child: SwitchListTile(
@@ -586,9 +950,9 @@ class _IntroScreenState extends State<IntroScreen> {
               onChanged: (v) => setState(() => _notifications = v),
             ),
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           Card(
             elevation: 0,
             child: ListTile(
@@ -602,8 +966,9 @@ class _IntroScreenState extends State<IntroScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : TextButton(
-                      onPressed:
-                          _locationPermissionGranted ? null : _requestLocationPermission,
+                      onPressed: _locationPermissionGranted
+                          ? null
+                          : _requestLocationPermission,
                       child: Text(
                         _locationPermissionGranted
                             ? Translations.granted
@@ -612,9 +977,9 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
             ),
           ),
-          
+
           const SizedBox(height: 8),
-          
+
           Card(
             elevation: 0,
             child: ListTile(
@@ -628,7 +993,8 @@ class _IntroScreenState extends State<IntroScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : TextButton(
-                      onPressed: (!notificationsRequired ||
+                      onPressed:
+                          (!notificationsRequired ||
                               _notificationPermissionGranted)
                           ? null
                           : _requestNotificationPermission,
@@ -640,15 +1006,12 @@ class _IntroScreenState extends State<IntroScreen> {
                     ),
             ),
           ),
-          
+
           if (!allPermissionsGranted) ...[
             const SizedBox(height: 20),
             Text(
               Translations.pleaseGrantAllPermissions,
-              style: TextStyle(
-                color: theme.colorScheme.error,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],
@@ -669,7 +1032,7 @@ class _IntroScreenState extends State<IntroScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(4, (index) {
+                children: List.generate(5, (index) {
                   return Container(
                     margin: const EdgeInsets.only(right: 8),
                     height: 4,
@@ -684,7 +1047,7 @@ class _IntroScreenState extends State<IntroScreen> {
                 }),
               ),
             ),
-            
+
             // Page content
             Expanded(
               child: PageView(
@@ -697,13 +1060,14 @@ class _IntroScreenState extends State<IntroScreen> {
                 },
                 children: [
                   _buildWelcomePage(),
+                  _buildCloudSyncPage(),
                   _buildNamePage(),
                   _buildThemePage(),
                   _buildPermissionsPage(),
                 ],
               ),
             ),
-            
+
             // Navigation buttons
             Padding(
               padding: const EdgeInsets.all(32),
@@ -716,7 +1080,7 @@ class _IntroScreenState extends State<IntroScreen> {
                         // Dismiss keyboard before changing pages
                         FocusScope.of(context).unfocus();
                         SystemChannels.textInput.invokeMethod('TextInput.hide');
-                        
+
                         _pageController.previousPage(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
@@ -726,18 +1090,22 @@ class _IntroScreenState extends State<IntroScreen> {
                     )
                   else
                     const SizedBox.shrink(),
-                  
+
                   ElevatedButton(
-                    onPressed: (_currentPage == 3 &&
+                    onPressed:
+                        (_currentPage == 4 &&
                             (!_locationPermissionGranted ||
-                                (_notifications && !_notificationPermissionGranted)))
+                                (_notifications &&
+                                    !_notificationPermissionGranted)))
                         ? null
                         : () {
                             // Dismiss keyboard before changing pages
                             FocusScope.of(context).unfocus();
-                            SystemChannels.textInput.invokeMethod('TextInput.hide');
-                            
-                            if (_currentPage < 3) {
+                            SystemChannels.textInput.invokeMethod(
+                              'TextInput.hide',
+                            );
+
+                            if (_currentPage < 4) {
                               _pageController.nextPage(
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
@@ -752,7 +1120,11 @@ class _IntroScreenState extends State<IntroScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: Text(_currentPage < 3 ? Translations.next : Translations.getStarted),
+                    child: Text(
+                      _currentPage < 4
+                          ? Translations.next
+                          : Translations.getStarted,
+                    ),
                   ),
                 ],
               ),

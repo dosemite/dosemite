@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/medication_repository.dart';
 import '../models/medication.dart';
 import '../screens/qr_import_screen.dart';
+import '../services/cloud_backup_service.dart';
 import '../services/notification_service.dart';
 import '../theme/language_controller.dart';
 import '../theme/theme_controller.dart';
@@ -32,10 +34,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _aboutClickCount = 0;
   bool _debugMenuVisible = false;
 
+  // Cloud backup state
+  bool _isCloudLoading = false;
+  String? _storedBackupKey;
+
   @override
   void initState() {
     super.initState();
     _loadUserName();
+    _loadStoredBackupKey();
     LanguageController.instance.addListener(_onLanguageChanged);
   }
 
@@ -119,6 +126,262 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(Translations.importFailed)));
+    }
+  }
+
+  Future<void> _loadStoredBackupKey() async {
+    final key = await CloudBackupService.instance.getStoredKey();
+    if (mounted) {
+      setState(() {
+        _storedBackupKey = key;
+      });
+    }
+  }
+
+  Future<void> _showCloudBackupDialog() async {
+    setState(() => _isCloudLoading = true);
+
+    // Check for existing key
+    final existingKey = await CloudBackupService.instance.getStoredKey();
+
+    setState(() => _isCloudLoading = false);
+
+    if (!mounted) return;
+
+    String? keyToUse;
+
+    if (existingKey != null) {
+      // Ask if they want to use existing key or generate new
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(Translations.cloudBackup),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${Translations.yourBackupKey}:'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        existingKey,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: existingKey));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(Translations.keyCopied)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(Translations.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(Translations.generateNewKey),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(Translations.backup),
+            ),
+          ],
+        ),
+      );
+
+      if (choice == null) return;
+      keyToUse = choice ? existingKey : null;
+    }
+
+    // Perform backup
+    setState(() => _isCloudLoading = true);
+
+    final resultKey = await CloudBackupService.instance.backupToCloud(
+      existingKey: keyToUse,
+    );
+
+    setState(() => _isCloudLoading = false);
+
+    if (!mounted) return;
+
+    if (resultKey != null) {
+      setState(() => _storedBackupKey = resultKey);
+      await _showBackupSuccessDialog(resultKey);
+    } else {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(Translations.cloudBackupFailed)));
+    }
+  }
+
+  Future<void> _showBackupSuccessDialog(String key) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(
+          Icons.check_circle,
+          color: Theme.of(context).colorScheme.primary,
+          size: 48,
+        ),
+        title: Text(Translations.backupSuccess),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              Translations.backupKeyInfo,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    key,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 3,
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: key));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(Translations.keyCopied)));
+            },
+            icon: const Icon(Icons.copy),
+            label: Text(Translations.copyKey),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(Translations.save),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCloudRestoreDialog() async {
+    final keyController = TextEditingController();
+
+    final shouldRestore = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(Translations.restoreFromCloud),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              Translations.enterBackupKey,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: keyController,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 18,
+                letterSpacing: 2,
+              ),
+              decoration: const InputDecoration(
+                hintText: 'XXXXXXXX',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.key),
+              ),
+              maxLength: 8,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(Translations.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(Translations.restore),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldRestore != true) return;
+
+    final key = keyController.text.trim().toUpperCase();
+    if (key.isEmpty) return;
+
+    setState(() => _isCloudLoading = true);
+
+    final success = await CloudBackupService.instance.restoreFromCloud(key);
+
+    setState(() => _isCloudLoading = false);
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _storedBackupKey = key;
+        _loadUserName(); // Reload username after restore
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(Translations.restoreSuccess),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(Translations.invalidKey),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     }
   }
 
@@ -402,6 +665,88 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
+          // Cloud Backup - More prominent, above QR options
+          Card(
+            elevation: 0,
+            color: Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withAlpha((0.3 * 255).round()),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Icon(
+                    Icons.cloud_upload_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(
+                    Translations.backupToCloud,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(Translations.cloudBackupSubtitle),
+                      if (_storedBackupKey != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '${Translations.yourBackupKey}: $_storedBackupKey',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  trailing: _isCloudLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.chevron_right,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  onTap: _isCloudLoading ? null : _showCloudBackupDialog,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: Icon(
+                    Icons.cloud_download_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(
+                    Translations.restoreFromCloud,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  subtitle: Text(Translations.enterBackupKey),
+                  trailing: _isCloudLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.chevron_right,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  onTap: _isCloudLoading ? null : _showCloudRestoreDialog,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // QR Code options (less prominent)
           ListTile(
             leading: const Icon(Icons.qr_code_2),
             title: Text(Translations.backupViaQr),

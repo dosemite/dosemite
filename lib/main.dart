@@ -17,20 +17,21 @@ import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Tema ve dil ayarlarını yükle
   await Future.wait([
     ThemeController.instance.loadFromPrefs(),
     LanguageController.instance.loadFromPrefs(),
     NotificationService.instance.initialize(),
   ]);
-  
+
   // Sistem temasını kontrol et ve ayarla
   final brightness = WidgetsBinding.instance.window.platformBrightness;
-  if (ThemeController.instance.value == AppTheme.light && brightness == Brightness.dark) {
+  if (ThemeController.instance.value == AppTheme.light &&
+      brightness == Brightness.dark) {
     ThemeController.instance.setTheme(AppTheme.darkGray);
   }
-  
+
   final seen = await ThemeController.hasSeenIntro();
   runApp(PharmacyApp(showIntro: !seen));
 }
@@ -198,7 +199,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   // 0 = Medicine Tracker, 1 = Drugstore Map
   int _selectedIndex = 0;
   bool _notificationsEnabled = true;
@@ -320,9 +322,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     }
 
     _refreshMedications();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(Translations.medicationAdded)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(Translations.medicationAdded)));
   }
 
   Future<void> _markMedicationTaken(int index) async {
@@ -362,9 +364,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
           Translations.lowStockMessage(updatedMedication.name, remaining),
         );
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(parts.join(' • '))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(parts.join(' • '))));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -426,7 +428,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       return Translations.noUpcomingMedications;
     }
 
-  final formatted = _formatDuration(soonestDiff);
+    final formatted = _formatDuration(soonestDiff);
     return Translations.nextMedicationIn(formatted);
   }
 
@@ -477,8 +479,9 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final lowSupplyMeds =
-        _selectedIndex == 0 ? _lowSupplyMedicationsForUi() : const <Medication>[];
+    final lowSupplyMeds = _selectedIndex == 0
+        ? _lowSupplyMedicationsForUi()
+        : const <Medication>[];
 
     return Scaffold(
       // We use a custom top area instead of AppBar to match the expressive layout
@@ -524,7 +527,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
                     ),
                     tooltip: 'Settings',
                     onPressed: () {
@@ -556,10 +560,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                       setState(() {
                         _notificationsEnabled = nextValue;
                       });
-                      await prefs.setBool(
-                        'notifications_enabled',
-                        nextValue,
-                      );
+                      await prefs.setBool('notifications_enabled', nextValue);
                       await _syncNotifications();
                     },
                     icon: Icon(
@@ -692,7 +693,8 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                               );
                             }
 
-                            final allMedications = snapshot.data ?? <Medication>[];
+                            final allMedications =
+                                snapshot.data ?? <Medication>[];
                             final activeEntries = <MapEntry<int, Medication>>[];
                             for (var i = 0; i < allMedications.length; i++) {
                               final med = allMedications[i];
@@ -867,9 +869,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
       final theme = Theme.of(context);
       return Text(
         Translations.noMedicationsAdded,
-        style: TextStyle(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
       );
     }
 
@@ -975,10 +975,7 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               color: badgeColor,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              badgeIcon,
-              color: theme.colorScheme.onSurface,
-            ),
+            child: Icon(badgeIcon, color: theme.colorScheme.onSurface),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1186,10 +1183,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              Translations.addDrug,
-              style: theme.textTheme.titleMedium,
-            ),
+            Text(Translations.addDrug, style: theme.textTheme.titleMedium),
             const SizedBox(height: 16),
             TextField(
               controller: _nameController,
@@ -1222,10 +1216,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
             ),
             const SizedBox(height: 12),
             const SizedBox(height: 12),
-            Text(
-              Translations.usageTime,
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text(Translations.usageTime, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),
             OutlinedButton.icon(
               onPressed: _pickTime,
@@ -1233,18 +1224,16 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
               label: Text(timeLabel),
             ),
             const SizedBox(height: 12),
-            Text(
-              Translations.courseEndDate,
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text(Translations.courseEndDate, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),
             OutlinedButton.icon(
               onPressed: _pickCourseEndDate,
               icon: const Icon(Icons.event),
               label: Text(
                 _courseEndDate != null
-                    ? MaterialLocalizations.of(context)
-                        .formatFullDate(_courseEndDate!)
+                    ? MaterialLocalizations.of(
+                        context,
+                      ).formatFullDate(_courseEndDate!)
                     : Translations.selectCourseEndDate,
               ),
             ),
@@ -1253,9 +1242,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
               controller: _quantityController,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                labelText: Translations.stockOnHand,
-              ),
+              decoration: InputDecoration(labelText: Translations.stockOnHand),
               onChanged: (_) {
                 if (_errorText != null) {
                   setState(() {
@@ -1420,15 +1407,14 @@ class _LowSupplyBanner extends StatelessWidget {
         children: [
           Text(
             Translations.lowStockWarning,
-            style: TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           for (var i = 0; i < medications.length; i++)
             Padding(
-              padding: EdgeInsets.only(bottom: i == medications.length - 1 ? 0 : 6),
+              padding: EdgeInsets.only(
+                bottom: i == medications.length - 1 ? 0 : 6,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1436,14 +1422,8 @@ class _LowSupplyBanner extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${Translations.lowStockMessage(
-                        medications[i].name,
-                        medications[i].remainingQuantity ?? 0,
-                      )} ${Translations.pleaseRestockSoon}',
-                      style: TextStyle(
-                        color: textColor,
-                        height: 1.2,
-                      ),
+                      '${Translations.lowStockMessage(medications[i].name, medications[i].remainingQuantity ?? 0)} ${Translations.pleaseRestockSoon}',
+                      style: TextStyle(color: textColor, height: 1.2),
                     ),
                   ),
                 ],

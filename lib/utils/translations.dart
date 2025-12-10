@@ -9,8 +9,8 @@ class Translations {
       _getText('Welcome to DoseMite', 'DoseMite\'a Hoş Geldiniz');
 
   static String get welcomeSubtitle => _getText(
-    'Your personal medication companion',
-    'Kişisel ilaç asistanınız',
+    '',
+    '',
   );
 
   // Language
@@ -22,7 +22,7 @@ class Translations {
 
   // Name Page
   static String get whatShouldWeCallYou =>
-      _getText('What should we call you?', 'Size nasıl hitap edelim?');
+      _getText('What\'s your name?', 'Adınız ne?');
 
   static String get wellUseThisToPersonalize => _getText(
     'We\'ll use this to personalize your experience',
@@ -94,18 +94,20 @@ class Translations {
   static String get sendMedicationReminders =>
       _getText('Send medication reminders', 'İlaç bildirimleri gönder');
 
-  static String reminderTitle(String medicationName) =>
-      _getText('Time to take $medicationName', '$medicationName alma zamanı');
+  static String reminderTitle(String medicationName) => _getText(
+    'Time to take $medicationName!!',
+    '$medicationName alma zamanı!!!',
+  );
 
   static String reminderBody(String dose) =>
       _getText('Dose: $dose', 'Doz: $dose');
 
-  static String get granted => _getText('Granted', 'Verildi');
+  static String get granted => _getText('OK', 'OK');
 
   static String get allow => _getText('Allow', 'İzin Ver');
 
   static String get pleaseGrantAllPermissions => _getText(
-    'Please grant all permissions to continue',
+    'All permissions are needed for the app to work',
     'Devam etmek için lütfen tüm izinleri verin',
   );
 
@@ -124,11 +126,11 @@ class Translations {
   static String get getStarted => _getText('Get Started', 'Başla');
 
   // Dashboard
-  static String get goodMorning => _getText('Good Morning', 'Günaydın');
+  static String get goodMorning => _getText('Good morning', 'Günaydın');
 
-  static String get goodAfternoon => _getText('Good Afternoon', 'İyi Günler');
+  static String get goodAfternoon => _getText('Good afternoon', 'İyi Günler');
 
-  static String get goodEvening => _getText('Good Evening', 'İyi Akşamlar');
+  static String get goodEvening => _getText('Good evening', 'İyi Akşamlar');
 
   static String nextMedicationIn(String time) =>
       _getText('Next medication in $time', 'Sonraki ilaç $time içinde');
@@ -137,7 +139,7 @@ class Translations {
       _getText('No upcoming medications', 'Yaklaşan ilaç yok');
 
   static String get lessThanOneMinute =>
-      _getText('Less than a minute', 'Bir dakikadan az');
+      _getText('less than a minute', 'bir dakikadan az');
 
   static String durationDays(int days) =>
       _getText(days == 1 ? '1 day' : '$days days', '$days gün');
@@ -150,8 +152,7 @@ class Translations {
     '$minutes dakika',
   );
 
-  static String get searchMedications =>
-      _getText('Search medications...', 'İlaç ara...');
+  static String get searchMedications => _getText('Search', 'Ara');
 
   static String get todaysSchedule =>
       _getText('Today\'s Schedule', 'Bugünkü Program');
@@ -166,13 +167,13 @@ class Translations {
 
   static String get map => _getText('Map', 'Harita');
 
-  static String get addDrug => _getText('Add Drug', 'İlaç Ekle');
+  static String get addDrug => _getText('Add', 'İlaç Ekle');
 
   static String get medicationName => _getText('Medication name', 'İlaç adı');
 
   static String get medicationDose => _getText('Dose', 'Doz');
 
-  static String get usageTime => _getText('Usage time', 'Kullanım zamanı');
+  static String get usageTime => _getText('When to use?', 'Kullanım zamanı');
 
   static String get selectTime => _getText('Select time', 'Zaman seç');
 
@@ -194,20 +195,19 @@ class Translations {
   );
 
   static String get quantityRequired => _getText(
-    'Please tell us how many pills you have.',
+    'Please enter in how many pills you have left.',
     'Kaç hap kaldığını belirtmelisiniz.',
   );
 
   static String get medicationNotesOptional =>
-      _getText('Notes (optional)', 'Notlar (isteğe bağlı)');
+      _getText('Notes (optional)', 'Notlar (isterseniz)');
 
   static String get medicationFormIncomplete => _getText(
     'Please fill in the required fields.',
     'Gerekli alanları doldurmanız lazım!',
   );
 
-  static String get medicationAdded =>
-      _getText('Medication added', 'İlaç eklendi');
+  static String get medicationAdded => _getText('Added!', 'Eklendi!');
 
   static String get unableToSaveMedication =>
       _getText('Unable to save medication.', 'İlaç kaydedilemedi.');
@@ -288,7 +288,7 @@ class Translations {
   );
 
   static String get importSuccess =>
-      _getText('Medication list restored.', 'İlaç listesi geri yüklendi.');
+      _getText('Medication list restored!', 'İlaç listesi geri yüklendi!');
 
   static String get scanningQrInstructions => _getText(
     'Align the QR code within the frame to scan.',
@@ -299,8 +299,8 @@ class Translations {
   static String get cloudBackup => _getText('Cloud Backup', 'Bulut Yedekleme');
 
   static String get cloudBackupSubtitle => _getText(
-    'Sync your data across devices with a unique key',
-    'Benzersiz bir anahtar ile verilerinizi cihazlar arası senkronize edin',
+    'Sync your data across devices with a unique doseKey',
+    'Benzersiz bir doseKey ile verilerinizi cihazlar arası senkronize edin',
   );
 
   static String get backupToCloud =>
@@ -309,17 +309,16 @@ class Translations {
   static String get restoreFromCloud =>
       _getText('Restore from Cloud', 'Buluttan Geri Yükle');
 
-  static String get yourBackupKey =>
-      _getText('Your Backup Key', 'Yedekleme Anahtarınız');
+  static String get yourBackupKey => _getText('Your doseKey', 'DoseKeyiniz');
 
   static String get enterBackupKey =>
-      _getText('Enter your backup key', 'Yedekleme anahtarınızı girin');
+      _getText('Enter your doseKey', 'DoseKeyinizi girin');
 
   static String get generateNewKey =>
-      _getText('Generate New Key', 'Yeni Anahtar Oluştur');
+      _getText('Generate New doseKey', 'Yeni doseKey Oluştur');
 
   static String get useExistingKey =>
-      _getText('Use Existing Key', 'Mevcut Anahtarı Kullan');
+      _getText('Use Existing doseKey', 'Mevcut doseKeyi Kullan');
 
   static String get backupSuccess => _getText(
     'Backup completed successfully!',
@@ -332,8 +331,8 @@ class Translations {
   );
 
   static String get invalidKey => _getText(
-    'Invalid backup key. Please check and try again.',
-    'Geçersiz yedekleme anahtarı. Kontrol edip tekrar deneyin.',
+    'Invalid doseKey. Please check and try again.',
+    'Geçersiz doseKey. Kontrol edip tekrar deneyin.',
   );
 
   static String get cloudBackupFailed => _getText(
@@ -346,14 +345,14 @@ class Translations {
     'Buluttan geri yükleme başarısız. Anahtarınızı kontrol edin.',
   );
 
-  static String get copyKey => _getText('Copy Key', 'Anahtarı Kopyala');
+  static String get copyKey => _getText('Copy doseKey', 'DoseKeyi Kopyala');
 
   static String get keyCopied =>
-      _getText('Key copied to clipboard', 'Anahtar panoya kopyalandı');
+      _getText('Key copied to clipboard', 'DoseKey panoya kopyalandı');
 
   static String get backupKeyInfo => _getText(
-    'Save this key! You can use it to restore your data on any device.',
-    'Bu anahtarı kaydedin! Herhangi bir cihazda verilerinizi geri yüklemek için kullanabilirsiniz.',
+    'Save this doseKey! You can use it to restore your data on any device.',
+    'Bu doseKeyi kaydedin! Herhangi bir cihazda verilerinizi geri yüklemek için kullanabilirsiniz.',
   );
 
   static String get backingUp => _getText('Backing up...', 'Yedekleniyor...');
@@ -365,8 +364,8 @@ class Translations {
   static String get backup => _getText('Backup', 'Yedekle');
 
   static String get cloudSyncDescription => _getText(
-    'Already have an account? Enter your backup key to restore your data. Or continue to create a new account.',
-    'Zaten bir hesabınız var mı? Verilerinizi geri yüklemek için yedekleme anahtarınızı girin. Ya da yeni hesap oluşturmak için devam edin.',
+    'Already have an account? Enter your doseKey to restore your data. Or continue to create a new account.',
+    'Zaten bir hesabınız var mı? Verilerinizi geri yüklemek için doseKeyinizi girin. Ya da yeni hesap oluşturmak için devam edin.',
   );
 
   static String get or => _getText('or', 'veya');
@@ -374,8 +373,8 @@ class Translations {
   static String get newUser => _getText('New User', 'Yeni Kullanıcı');
 
   static String get newUserDescription => _getText(
-    "Continue to set up a new account. You'll get a backup key after completing the setup.",
-    'Yeni bir hesap oluşturmak için devam edin. Kurulumu tamamladıktan sonra bir yedekleme anahtarı alacaksınız.',
+    "Continue to set up a new account. You'll get a doseKey after completing the setup.",
+    'Yeni bir hesap oluşturmak için devam edin. Kurulumu tamamladıktan sonra bir doseKey alacaksınız.',
   );
 
   static String get skip => _getText('Skip', 'Atla');
@@ -402,14 +401,14 @@ class Translations {
   static String get about => _getText('About', 'Hakkında');
 
   static String get aboutDoseMite =>
-      _getText('About DoseMite', 'DoseMite Hakkında');
+      _getText('About doseMite', 'doseMite Hakkında');
 
-  static String get version => _getText('Version 1.0.0', 'Sürüm 1.0.0');
+  static String get version => _getText('Version 0.1.1alpha', 'Sürüm 0.1.1alpha');
 
-  static String get sourceCode => _getText('Source Code', 'Kaynak Kodu');
+  static String get sourceCode => _getText('Source', 'Kaynak');
 
   static String get viewOnGitHub =>
-      _getText('View on GitHub', 'GitHub\'da Görüntüle');
+      _getText('doseMite is open-source!', 'doseMite açık kaynaklı!');
 
   static String get couldNotOpenGitHubPage =>
       _getText('Could not open GitHub page', 'GitHub sayfası açılamadı');

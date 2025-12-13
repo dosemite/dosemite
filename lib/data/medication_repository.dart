@@ -27,9 +27,10 @@ class MedicationRepository {
     }
 
     return decoded
-        .map((entry) => Medication.fromJson(
-              Map<String, dynamic>.from(entry as Map),
-            ))
+        .map(
+          (entry) =>
+              Medication.fromJson(Map<String, dynamic>.from(entry as Map)),
+        )
         .toList();
   }
 
@@ -43,12 +44,29 @@ class MedicationRepository {
   Future<void> addMedication(Medication medication) async {
     final existing = await loadMedications();
     final updated = List<Medication>.from(existing)
-      ..add(
-        medication.copyWith(
-          isEnabled: true,
-          isHistoric: false,
-        ),
-      );
+      ..add(medication.copyWith(isEnabled: true, isHistoric: false));
+    await saveMedications(updated);
+  }
+
+  /// Updates an existing medication identified by its createdAt timestamp.
+  Future<void> updateMedication(Medication medication) async {
+    final existing = await loadMedications();
+    final index = existing.indexWhere(
+      (m) => m.createdAt.isAtSameMomentAs(medication.createdAt),
+    );
+    if (index == -1) {
+      throw StateError('Medication not found');
+    }
+    existing[index] = medication;
+    await saveMedications(existing);
+  }
+
+  /// Deletes a medication identified by its createdAt timestamp.
+  Future<void> deleteMedication(DateTime createdAt) async {
+    final existing = await loadMedications();
+    final updated = existing
+        .where((m) => !m.createdAt.isAtSameMomentAs(createdAt))
+        .toList();
     await saveMedications(updated);
   }
 

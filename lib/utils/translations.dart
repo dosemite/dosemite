@@ -1,4 +1,5 @@
 import '../theme/language_controller.dart';
+import 'build_info.dart';
 
 class Translations {
   // App Title
@@ -8,10 +9,7 @@ class Translations {
   static String get welcomeTitle =>
       _getText('Welcome to DoseMite', 'DoseMite\'a Hoş Geldiniz');
 
-  static String get welcomeSubtitle => _getText(
-    '',
-    '',
-  );
+  static String get welcomeSubtitle => _getText('', '');
 
   // Language
   static String get language => _getText('Language', 'Dil');
@@ -209,6 +207,27 @@ class Translations {
 
   static String get medicationAdded => _getText('Added!', 'Eklendi!');
 
+  static String get editMedication =>
+      _getText('Edit Medication', 'İlacı Düzenle');
+
+  static String get medicationUpdated =>
+      _getText('Medication updated!', 'İlaç güncellendi!');
+
+  static String get deleteMedication =>
+      _getText('Delete Medication', 'İlacı Sil');
+
+  static String get deleteMedicationConfirm => _getText(
+    'Are you sure you want to delete this medication?',
+    'Bu ilacı silmek istediğinizden emin misiniz?',
+  );
+
+  static String get medicationDeleted =>
+      _getText('Medication deleted', 'İlaç silindi');
+
+  static String get delete => _getText('Delete', 'Sil');
+
+  static String get update => _getText('Update', 'Güncelle');
+
   static String get unableToSaveMedication =>
       _getText('Unable to save medication.', 'İlaç kaydedilemedi.');
 
@@ -403,7 +422,8 @@ class Translations {
   static String get aboutDoseMite =>
       _getText('About doseMite', 'doseMite Hakkında');
 
-  static String get version => _getText('Version 0.1.1alpha', 'Sürüm 0.1.1alpha');
+  static String get version =>
+      _getText('Version ${BuildInfo.version}', 'Sürüm ${BuildInfo.version}');
 
   static String get sourceCode => _getText('Source', 'Kaynak');
 

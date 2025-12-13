@@ -390,6 +390,47 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  Future<_EditMedicationResult?> _showEditMedicationSheet(
+    Medication medication,
+  ) async {
+    return showModalBottomSheet<_EditMedicationResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _EditMedicationSheet(medication: medication),
+    );
+  }
+
+  Future<void> _onEditMedication(Medication medication) async {
+    final result = await _showEditMedicationSheet(medication);
+    if (result == null) {
+      return;
+    }
+
+    try {
+      if (result.shouldDelete) {
+        await _medicationRepository.deleteMedication(medication.createdAt);
+        if (!mounted) return;
+        _refreshMedications();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(Translations.medicationDeleted)));
+      } else if (result.updatedMedication != null) {
+        await _medicationRepository.updateMedication(result.updatedMedication!);
+        if (!mounted) return;
+        _refreshMedications();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(Translations.medicationUpdated)));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(Translations.unableToSaveMedication)),
+      );
+    }
+  }
+
   String _greetingText() {
     final hour = DateTime.now().hour;
     final prefix = hour < 12
@@ -893,6 +934,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             context,
             entry.value,
             onMarkTaken: () => _markMedicationTaken(entry.key),
+            onEdit: () => _onEditMedication(entry.value),
             isMarking: _markingMedicationIndices.contains(entry.key),
           ),
         );
@@ -946,6 +988,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     BuildContext context,
     Medication medication, {
     VoidCallback? onMarkTaken,
+    VoidCallback? onEdit,
     bool isMarking = false,
   }) {
     final theme = Theme.of(context);
@@ -953,91 +996,94 @@ class _DashboardScreenState extends State<DashboardScreen>
     final badgeIcon = _iconForPeriod(medication.period);
     final formattedTime = medication.time.format(context);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              color: badgeColor,
-              borderRadius: BorderRadius.circular(10),
+    return GestureDetector(
+      onTap: onEdit,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
             ),
-            child: Icon(badgeIcon, color: theme.colorScheme.onSurface),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${medication.name}, ${medication.dose}',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  formattedTime,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    fontSize: 13,
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              height: 48,
+              width: 48,
+              decoration: BoxDecoration(
+                color: badgeColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(badgeIcon, color: theme.colorScheme.onSurface),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${medication.name}, ${medication.dose}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                ),
-                if (medication.notes != null && medication.notes!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      medication.notes!,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            height: 36,
-            width: 36,
-            decoration: BoxDecoration(
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: isMarking
-                ? Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        theme.colorScheme.primary,
-                      ),
-                    ),
-                  )
-                : IconButton(
-                    tooltip: Translations.markMedicationTaken,
-                    padding: EdgeInsets.zero,
-                    icon: Icon(
-                      Icons.check_box_outline_blank,
-                      size: 20,
+                  const SizedBox(height: 6),
+                  Text(
+                    formattedTime,
+                    style: TextStyle(
                       color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 13,
                     ),
-                    onPressed: onMarkTaken,
                   ),
-          ),
-        ],
+                  if (medication.notes != null && medication.notes!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        medication.notes!,
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              height: 36,
+              width: 36,
+              decoration: BoxDecoration(
+                border: Border.all(color: theme.colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: isMarking
+                  ? Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          theme.colorScheme.primary,
+                        ),
+                      ),
+                    )
+                  : IconButton(
+                      tooltip: Translations.markMedicationTaken,
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        Icons.check_box_outline_blank,
+                        size: 20,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      onPressed: onMarkTaken,
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1272,6 +1318,316 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
               child: FilledButton(
                 onPressed: _submit,
                 child: Text(Translations.save),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Result type for edit medication sheet
+class _EditMedicationResult {
+  final Medication? updatedMedication;
+  final bool shouldDelete;
+
+  const _EditMedicationResult({
+    this.updatedMedication,
+    this.shouldDelete = false,
+  });
+}
+
+class _EditMedicationSheet extends StatefulWidget {
+  const _EditMedicationSheet({required this.medication});
+
+  final Medication medication;
+
+  @override
+  State<_EditMedicationSheet> createState() => _EditMedicationSheetState();
+}
+
+class _EditMedicationSheetState extends State<_EditMedicationSheet> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _doseController;
+  late final TextEditingController _notesController;
+  late final TextEditingController _quantityController;
+
+  TimeOfDay? _selectedTime;
+  DateTime? _courseEndDate;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    final med = widget.medication;
+    _nameController = TextEditingController(text: med.name);
+    _doseController = TextEditingController(text: med.dose);
+    _notesController = TextEditingController(text: med.notes ?? '');
+    _quantityController = TextEditingController(
+      text: med.remainingQuantity?.toString() ?? '',
+    );
+    _selectedTime = med.time;
+    _courseEndDate = med.courseEndDate;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _doseController.dispose();
+    _notesController.dispose();
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime ?? TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedTime = picked;
+        _errorText = null;
+      });
+    }
+  }
+
+  Future<void> _pickCourseEndDate() async {
+    final now = DateTime.now();
+    final initialDate = _courseEndDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: now.add(const Duration(days: 365 * 5)),
+      initialDate: initialDate.isBefore(now) ? now : initialDate,
+    );
+    if (picked != null) {
+      setState(() {
+        _courseEndDate = DateTime(picked.year, picked.month, picked.day);
+        _errorText = null;
+      });
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(Translations.deleteMedication),
+        content: Text(Translations.deleteMedicationConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(Translations.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(Translations.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      Navigator.of(
+        context,
+      ).pop(const _EditMedicationResult(shouldDelete: true));
+    }
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    final dose = _doseController.text.trim();
+    final notes = _notesController.text.trim();
+    final quantityText = _quantityController.text.trim();
+    final parsedQuantity = int.tryParse(quantityText);
+
+    if (name.isEmpty || dose.isEmpty || _selectedTime == null) {
+      setState(() {
+        _errorText = Translations.medicationFormIncomplete;
+      });
+      return;
+    }
+
+    if (_courseEndDate == null) {
+      setState(() {
+        _errorText = Translations.courseEndRequired;
+      });
+      return;
+    }
+
+    if (parsedQuantity == null || parsedQuantity < 0) {
+      setState(() {
+        _errorText = Translations.quantityRequired;
+      });
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    final time = _selectedTime!;
+    final period = _periodForTime(time);
+    final courseEnd = DateTime(
+      _courseEndDate!.year,
+      _courseEndDate!.month,
+      _courseEndDate!.day,
+      23,
+      59,
+      59,
+    );
+
+    final updated = widget.medication.copyWith(
+      name: name,
+      dose: dose,
+      time: time,
+      period: period,
+      notes: notes.isEmpty ? null : notes,
+      courseEndDate: courseEnd,
+      remainingQuantity: parsedQuantity,
+    );
+
+    Navigator.of(
+      context,
+    ).pop(_EditMedicationResult(updatedMedication: updated));
+  }
+
+  MedicationPeriod _periodForTime(TimeOfDay time) {
+    if (time.hour < 12) {
+      return MedicationPeriod.morning;
+    }
+    if (time.hour < 18) {
+      return MedicationPeriod.afternoon;
+    }
+    return MedicationPeriod.evening;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final mediaQuery = MediaQuery.of(context);
+    final timeLabel = _selectedTime != null
+        ? MaterialLocalizations.of(context).formatTimeOfDay(
+            _selectedTime!,
+            alwaysUse24HourFormat: mediaQuery.alwaysUse24HourFormat,
+          )
+        : Translations.selectTime;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  Translations.editMedication,
+                  style: theme.textTheme.titleMedium,
+                ),
+                IconButton(
+                  onPressed: _confirmDelete,
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: theme.colorScheme.error,
+                  ),
+                  tooltip: Translations.deleteMedication,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: Translations.medicationName,
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _doseController,
+              textInputAction: TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: Translations.medicationDose,
+              ),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            const SizedBox(height: 12),
+            Text(Translations.usageTime, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _pickTime,
+              icon: const Icon(Icons.access_time),
+              label: Text(timeLabel),
+            ),
+            const SizedBox(height: 12),
+            Text(Translations.courseEndDate, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: _pickCourseEndDate,
+              icon: const Icon(Icons.event),
+              label: Text(
+                _courseEndDate != null
+                    ? MaterialLocalizations.of(
+                        context,
+                      ).formatFullDate(_courseEndDate!)
+                    : Translations.selectCourseEndDate,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _quantityController,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(labelText: Translations.stockOnHand),
+              onChanged: (_) {
+                if (_errorText != null) {
+                  setState(() {
+                    _errorText = null;
+                  });
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              decoration: InputDecoration(
+                labelText: Translations.medicationNotesOptional,
+              ),
+              maxLines: 2,
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                _errorText!,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _submit,
+                child: Text(Translations.update),
               ),
             ),
           ],

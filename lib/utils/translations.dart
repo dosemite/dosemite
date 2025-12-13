@@ -175,6 +175,16 @@ class Translations {
 
   static String get selectTime => _getText('Select time', 'Zaman seç');
 
+  static String get addTime => _getText('Add time', 'Saat ekle');
+
+  static String get addAtLeastOneTime =>
+      _getText('Add at least one time', 'En az bir saat ekleyin');
+
+  static String timesPerDay(int count) => _getText(
+    count == 1 ? '1 time/day' : '$count times/day',
+    count == 1 ? 'Günde 1 kez' : 'Günde $count kez',
+  );
+
   static String get courseEndDate =>
       _getText('Course end date', 'Tedavinin biteceği tarih');
 

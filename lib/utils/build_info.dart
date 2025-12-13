@@ -5,15 +5,20 @@ class BuildInfo {
   BuildInfo._();
 
   /// Current app version
-  static const String version = '0.1-alpha';
+  static const String version = '0.1.1-alpha';
 
-  /// Build date in ISO 8601 format
+  /// Build date in ISO 8601 format with time to the second
   /// Update this date when creating a new build
-  static const String buildDate = '2025-12-11';
+  static const String buildDate = '2025-12-13T19:00:49';
 
   /// Version history with build dates
   /// Add new entries when updating the version
   static const List<Map<String, String>> versionHistory = [
+    {
+      'version': '0.1.1-alpha',
+      'buildDate': '2025-12-13T19:00:49',
+      'notes': 'Added taking a medicine multiple times a day',
+    },
     {
       'version': '0.1-alpha',
       'buildDate': '2025-12-11',

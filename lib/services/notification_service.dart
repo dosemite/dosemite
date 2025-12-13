@@ -401,9 +401,7 @@ class NotificationService {
     return trimmed;
   }
 
-  Future<void> _scheduleMedication(int id, Medication medication) async {
-    final scheduleDate = _nextInstanceOfTime(medication.time);
-
+  Future<void> _scheduleMedication(int baseId, Medication medication) async {
     final details = NotificationDetails(
       android: AndroidNotificationDetails(
         _medicationChannel.id,
@@ -417,23 +415,31 @@ class NotificationService {
       macOS: const DarwinNotificationDetails(),
     );
 
-    await _plugin.zonedSchedule(
-      id,
-      Translations.reminderTitle(medication.name),
-      Translations.reminderBody(medication.dose),
-      scheduleDate,
-      details,
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-    );
+    // Schedule a notification for each time in the medication's times list
+    for (var i = 0; i < medication.times.length; i++) {
+      final time = medication.times[i];
+      final scheduleDate = _nextInstanceOfTime(time);
+      // Use unique ID for each time slot: baseId * 100 + time index
+      final notificationId = baseId * 100 + i;
 
-    final readable =
-        '${scheduleDate.toString()} (${scheduleDate.location.name})';
-    debugPrint(
-      'NotificationService: scheduled ${medication.name} (${medication.dose}) for $readable with id $id',
-    );
+      await _plugin.zonedSchedule(
+        notificationId,
+        Translations.reminderTitle(medication.name),
+        Translations.reminderBody(medication.dose),
+        scheduleDate,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+
+      final readable =
+          '${scheduleDate.toString()} (${scheduleDate.location.name})';
+      debugPrint(
+        'NotificationService: scheduled ${medication.name} (${medication.dose}) for $readable with id $notificationId',
+      );
+    }
   }
 
   tz.TZDateTime _nextInstanceOfTime(TimeOfDay time) {

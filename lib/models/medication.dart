@@ -6,7 +6,7 @@ class Medication {
   Medication({
     required this.name,
     required this.dose,
-    required this.time,
+    required this.times,
     required this.period,
     this.notes,
     this.isEnabled = true,
@@ -16,13 +16,15 @@ class Medication {
     this.totalQuantity,
     int? remainingQuantity,
     List<DateTime>? intakeHistory,
-  })  : createdAt = createdAt ?? DateTime.now(),
-        remainingQuantity = remainingQuantity ?? totalQuantity,
-        intakeHistory = List<DateTime>.unmodifiable(intakeHistory ?? const <DateTime>[]);
+  }) : createdAt = createdAt ?? DateTime.now(),
+       remainingQuantity = remainingQuantity ?? totalQuantity,
+       intakeHistory = List<DateTime>.unmodifiable(
+         intakeHistory ?? const <DateTime>[],
+       );
 
   final String name;
   final String dose;
-  final TimeOfDay time;
+  final List<TimeOfDay> times;
   final MedicationPeriod period;
   final String? notes;
   final bool isEnabled;
@@ -33,27 +35,46 @@ class Medication {
   final int? remainingQuantity;
   final List<DateTime> intakeHistory;
 
+  /// Backward compatibility: returns the first time in the list
+  TimeOfDay get time =>
+      times.isNotEmpty ? times.first : const TimeOfDay(hour: 8, minute: 0);
+
   factory Medication.fromJson(Map<String, dynamic> json) {
     final rawName = json['name'];
     final rawDose = json['dose'];
-    final rawTime = json['time'];
     final rawPeriod = json['period'];
 
-    if (rawName is! String || rawDose is! String || rawTime is! String) {
-      throw const FormatException('Medication json missing required string fields');
+    if (rawName is! String || rawDose is! String) {
+      throw const FormatException(
+        'Medication json missing required string fields',
+      );
     }
 
-    final time = _parseTime(rawTime);
+    // Support both old 'time' (single string) and new 'times' (list) formats
+    List<TimeOfDay> times;
+    if (json['times'] is List) {
+      times = (json['times'] as List)
+          .map((t) => _parseTime(t as String))
+          .toList();
+    } else if (json['time'] is String) {
+      // Backward compatibility: single time string
+      times = [_parseTime(json['time'] as String)];
+    } else {
+      throw const FormatException('Medication json missing time/times field');
+    }
+
     final period = _parsePeriod(rawPeriod);
 
     return Medication(
       name: rawName,
       dose: rawDose,
-      time: time,
+      times: times,
       period: period,
       notes: json['notes'] as String?,
       isEnabled: json['isEnabled'] is bool ? json['isEnabled'] as bool : true,
-      isHistoric: json['isHistoric'] is bool ? json['isHistoric'] as bool : false,
+      isHistoric: json['isHistoric'] is bool
+          ? json['isHistoric'] as bool
+          : false,
       createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
       courseEndDate: _parseDateTime(json['courseEndDate']),
       totalQuantity: _parseInt(json['totalQuantity']),
@@ -63,28 +84,28 @@ class Medication {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'name': name,
-        'dose': dose,
-        'time': _formatTime(time),
-        'period': _formatPeriod(period),
-        if (notes != null) 'notes': notes,
-        'isEnabled': isEnabled,
-        'isHistoric': isHistoric,
-        'createdAt': createdAt.toIso8601String(),
-        if (courseEndDate != null)
-          'courseEndDate': courseEndDate!.toIso8601String(),
-        if (totalQuantity != null) 'totalQuantity': totalQuantity,
-        if (remainingQuantity != null) 'remainingQuantity': remainingQuantity,
-        if (intakeHistory.isNotEmpty)
-          'intakeHistory': intakeHistory
-              .map((dt) => dt.toIso8601String())
-              .toList(growable: false),
-      };
+    'name': name,
+    'dose': dose,
+    'times': times.map((t) => _formatTime(t)).toList(),
+    'period': _formatPeriod(period),
+    if (notes != null) 'notes': notes,
+    'isEnabled': isEnabled,
+    'isHistoric': isHistoric,
+    'createdAt': createdAt.toIso8601String(),
+    if (courseEndDate != null)
+      'courseEndDate': courseEndDate!.toIso8601String(),
+    if (totalQuantity != null) 'totalQuantity': totalQuantity,
+    if (remainingQuantity != null) 'remainingQuantity': remainingQuantity,
+    if (intakeHistory.isNotEmpty)
+      'intakeHistory': intakeHistory
+          .map((dt) => dt.toIso8601String())
+          .toList(growable: false),
+  };
 
   Medication copyWith({
     String? name,
     String? dose,
-    TimeOfDay? time,
+    List<TimeOfDay>? times,
     MedicationPeriod? period,
     String? notes,
     bool? isEnabled,
@@ -98,7 +119,7 @@ class Medication {
     return Medication(
       name: name ?? this.name,
       dose: dose ?? this.dose,
-      time: time ?? this.time,
+      times: times ?? this.times,
       period: period ?? this.period,
       notes: notes ?? this.notes,
       isEnabled: isEnabled ?? this.isEnabled,
@@ -107,8 +128,9 @@ class Medication {
       courseEndDate: courseEndDate ?? this.courseEndDate,
       totalQuantity: totalQuantity ?? this.totalQuantity,
       remainingQuantity: remainingQuantity ?? this.remainingQuantity,
-      intakeHistory:
-          intakeHistory != null ? List<DateTime>.unmodifiable(intakeHistory) : this.intakeHistory,
+      intakeHistory: intakeHistory != null
+          ? List<DateTime>.unmodifiable(intakeHistory)
+          : this.intakeHistory,
     );
   }
 
@@ -122,8 +144,10 @@ class Medication {
       }
     }
 
-    final bool supplyFinished = updatedRemaining != null && updatedRemaining <= 0;
-    final bool courseFinished = courseEndDate != null && !timestamp.isBefore(courseEndDate!);
+    final bool supplyFinished =
+        updatedRemaining != null && updatedRemaining <= 0;
+    final bool courseFinished =
+        courseEndDate != null && !timestamp.isBefore(courseEndDate!);
     final bool shouldArchive = supplyFinished || courseFinished;
 
     return copyWith(
@@ -134,11 +158,14 @@ class Medication {
     );
   }
 
-  DateTime? get lastIntake =>
-      intakeHistory.isEmpty ? null : intakeHistory.reduce((a, b) => a.isAfter(b) ? a : b);
+  DateTime? get lastIntake => intakeHistory.isEmpty
+      ? null
+      : intakeHistory.reduce((a, b) => a.isAfter(b) ? a : b);
 
   bool get hasLowStock {
-    if (remainingQuantity == null || totalQuantity == null || totalQuantity! <= 0) {
+    if (remainingQuantity == null ||
+        totalQuantity == null ||
+        totalQuantity! <= 0) {
       return false;
     }
     final threshold = (totalQuantity! * 0.2).ceil().clamp(1, totalQuantity!);
@@ -148,11 +175,15 @@ class Medication {
   bool get isCourseActive {
     final supplyAvailable = remainingQuantity == null || remainingQuantity! > 0;
     final now = DateTime.now();
-    final withinCourse = courseEndDate == null ||
+    final withinCourse =
+        courseEndDate == null ||
         now.isBefore(courseEndDate!) ||
         now.isAtSameMomentAs(courseEndDate!);
     return isEnabled && !isHistoric && supplyAvailable && withinCourse;
   }
+
+  /// Returns the number of times per day this medication should be taken
+  int get timesPerDay => times.length;
 
   static TimeOfDay _parseTime(String raw) {
     final pieces = raw.split(':');

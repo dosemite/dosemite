@@ -454,14 +454,17 @@ class _DashboardScreenState extends State<DashboardScreen>
         continue;
       }
 
-      final nextOccurrence = _nextOccurrenceFor(med.time, now);
-      var diff = nextOccurrence.difference(now);
-      if (diff.isNegative) {
-        diff = Duration.zero;
-      }
+      // Check all times for this medication
+      for (final time in med.times) {
+        final nextOccurrence = _nextOccurrenceFor(time, now);
+        var diff = nextOccurrence.difference(now);
+        if (diff.isNegative) {
+          diff = Duration.zero;
+        }
 
-      if (soonestDiff == null || diff < soonestDiff) {
-        soonestDiff = diff;
+        if (soonestDiff == null || diff < soonestDiff) {
+          soonestDiff = diff;
+        }
       }
     }
 
@@ -994,7 +997,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     final theme = Theme.of(context);
     final badgeColor = _badgeColorForPeriod(medication.period, theme);
     final badgeIcon = _iconForPeriod(medication.period);
-    final formattedTime = medication.time.format(context);
+    // Format all times as comma-separated list
+    final formattedTimes = medication.times
+        .map((t) => t.format(context))
+        .join(', ');
 
     return GestureDetector(
       onTap: onEdit,
@@ -1032,12 +1038,40 @@ class _DashboardScreenState extends State<DashboardScreen>
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    formattedTime,
-                    style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontSize: 13,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          formattedTimes,
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      if (medication.timesPerDay > 1) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primaryContainer
+                                .withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            Translations.timesPerDay(medication.timesPerDay),
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   if (medication.notes != null && medication.notes!.isNotEmpty)
                     Padding(
@@ -1102,7 +1136,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
 
-  TimeOfDay? _selectedTime;
+  List<TimeOfDay> _selectedTimes = [];
   DateTime? _courseEndDate;
   String? _errorText;
 
@@ -1115,17 +1149,29 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
     super.dispose();
   }
 
-  Future<void> _pickTime() async {
+  Future<void> _addTime() async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      initialTime: TimeOfDay.now(),
     );
     if (picked != null) {
       setState(() {
-        _selectedTime = picked;
+        // Add the time and sort by hour/minute
+        _selectedTimes = [..._selectedTimes, picked]
+          ..sort((a, b) {
+            final aMinutes = a.hour * 60 + a.minute;
+            final bMinutes = b.hour * 60 + b.minute;
+            return aMinutes.compareTo(bMinutes);
+          });
         _errorText = null;
       });
     }
+  }
+
+  void _removeTime(int index) {
+    setState(() {
+      _selectedTimes = List<TimeOfDay>.from(_selectedTimes)..removeAt(index);
+    });
   }
 
   Future<void> _pickCourseEndDate() async {
@@ -1152,7 +1198,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
     final quantityText = _quantityController.text.trim();
     final parsedQuantity = int.tryParse(quantityText);
 
-    if (name.isEmpty || dose.isEmpty || _selectedTime == null) {
+    if (name.isEmpty || dose.isEmpty || _selectedTimes.isEmpty) {
       setState(() {
         _errorText = Translations.medicationFormIncomplete;
       });
@@ -1174,8 +1220,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
     }
 
     FocusScope.of(context).unfocus();
-    final time = _selectedTime!;
-    final period = _periodForTime(time);
+    final period = _periodForTime(_selectedTimes.first);
     final courseEnd = DateTime(
       _courseEndDate!.year,
       _courseEndDate!.month,
@@ -1189,7 +1234,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
       Medication(
         name: name,
         dose: dose,
-        time: time,
+        times: _selectedTimes,
         period: period,
         notes: notes.isEmpty ? null : notes,
         courseEndDate: courseEnd,
@@ -1214,12 +1259,7 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mediaQuery = MediaQuery.of(context);
-    final timeLabel = _selectedTime != null
-        ? MaterialLocalizations.of(context).formatTimeOfDay(
-            _selectedTime!,
-            alwaysUse24HourFormat: mediaQuery.alwaysUse24HourFormat,
-          )
-        : Translations.selectTime;
+    final localizations = MaterialLocalizations.of(context);
 
     return Padding(
       padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
@@ -1264,11 +1304,40 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
             const SizedBox(height: 12),
             Text(Translations.usageTime, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),
-            OutlinedButton.icon(
-              onPressed: _pickTime,
-              icon: const Icon(Icons.access_time),
-              label: Text(timeLabel),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ..._selectedTimes.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final time = entry.value;
+                  return InputChip(
+                    label: Text(
+                      localizations.formatTimeOfDay(
+                        time,
+                        alwaysUse24HourFormat: mediaQuery.alwaysUse24HourFormat,
+                      ),
+                    ),
+                    deleteIcon: const Icon(Icons.close, size: 18),
+                    onDeleted: () => _removeTime(index),
+                  );
+                }),
+                ActionChip(
+                  avatar: const Icon(Icons.add, size: 18),
+                  label: Text(Translations.addTime),
+                  onPressed: _addTime,
+                ),
+              ],
             ),
+            if (_selectedTimes.isEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                Translations.addAtLeastOneTime,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Text(Translations.courseEndDate, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),
@@ -1353,7 +1422,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
   late final TextEditingController _notesController;
   late final TextEditingController _quantityController;
 
-  TimeOfDay? _selectedTime;
+  List<TimeOfDay> _selectedTimes = [];
   DateTime? _courseEndDate;
   String? _errorText;
 
@@ -1367,7 +1436,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     _quantityController = TextEditingController(
       text: med.remainingQuantity?.toString() ?? '',
     );
-    _selectedTime = med.time;
+    _selectedTimes = List<TimeOfDay>.from(med.times);
     _courseEndDate = med.courseEndDate;
   }
 
@@ -1380,17 +1449,29 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     super.dispose();
   }
 
-  Future<void> _pickTime() async {
+  Future<void> _addTime() async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      initialTime: TimeOfDay.now(),
     );
     if (picked != null) {
       setState(() {
-        _selectedTime = picked;
+        // Add the time and sort by hour/minute
+        _selectedTimes = [..._selectedTimes, picked]
+          ..sort((a, b) {
+            final aMinutes = a.hour * 60 + a.minute;
+            final bMinutes = b.hour * 60 + b.minute;
+            return aMinutes.compareTo(bMinutes);
+          });
         _errorText = null;
       });
     }
+  }
+
+  void _removeTime(int index) {
+    setState(() {
+      _selectedTimes = List<TimeOfDay>.from(_selectedTimes)..removeAt(index);
+    });
   }
 
   Future<void> _pickCourseEndDate() async {
@@ -1446,7 +1527,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     final quantityText = _quantityController.text.trim();
     final parsedQuantity = int.tryParse(quantityText);
 
-    if (name.isEmpty || dose.isEmpty || _selectedTime == null) {
+    if (name.isEmpty || dose.isEmpty || _selectedTimes.isEmpty) {
       setState(() {
         _errorText = Translations.medicationFormIncomplete;
       });
@@ -1468,8 +1549,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     }
 
     FocusScope.of(context).unfocus();
-    final time = _selectedTime!;
-    final period = _periodForTime(time);
+    final period = _periodForTime(_selectedTimes.first);
     final courseEnd = DateTime(
       _courseEndDate!.year,
       _courseEndDate!.month,
@@ -1482,7 +1562,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     final updated = widget.medication.copyWith(
       name: name,
       dose: dose,
-      time: time,
+      times: _selectedTimes,
       period: period,
       notes: notes.isEmpty ? null : notes,
       courseEndDate: courseEnd,
@@ -1508,12 +1588,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mediaQuery = MediaQuery.of(context);
-    final timeLabel = _selectedTime != null
-        ? MaterialLocalizations.of(context).formatTimeOfDay(
-            _selectedTime!,
-            alwaysUse24HourFormat: mediaQuery.alwaysUse24HourFormat,
-          )
-        : Translations.selectTime;
+    final localizations = MaterialLocalizations.of(context);
 
     return Padding(
       padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
@@ -1574,11 +1649,40 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
             const SizedBox(height: 12),
             Text(Translations.usageTime, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),
-            OutlinedButton.icon(
-              onPressed: _pickTime,
-              icon: const Icon(Icons.access_time),
-              label: Text(timeLabel),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ..._selectedTimes.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final time = entry.value;
+                  return InputChip(
+                    label: Text(
+                      localizations.formatTimeOfDay(
+                        time,
+                        alwaysUse24HourFormat: mediaQuery.alwaysUse24HourFormat,
+                      ),
+                    ),
+                    deleteIcon: const Icon(Icons.close, size: 18),
+                    onDeleted: () => _removeTime(index),
+                  );
+                }),
+                ActionChip(
+                  avatar: const Icon(Icons.add, size: 18),
+                  label: Text(Translations.addTime),
+                  onPressed: _addTime,
+                ),
+              ],
             ),
+            if (_selectedTimes.isEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                Translations.addAtLeastOneTime,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Text(Translations.courseEndDate, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),

@@ -31,6 +31,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _userName = '';
   final MedicationRepository _repository = MedicationRepository();
 
+  // Intake time window setting (in minutes)
+  int _intakeTimeWindowMinutes = 60;
+
   // Debug menu access
   int _aboutClickCount = 0;
   bool _debugMenuVisible = false;
@@ -44,7 +47,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadUserName();
     _loadStoredBackupKey();
+    _loadIntakeTimeWindow();
     LanguageController.instance.addListener(_onLanguageChanged);
+  }
+
+  Future<void> _loadIntakeTimeWindow() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _intakeTimeWindowMinutes =
+          prefs.getInt('intake_time_window_minutes') ?? 60;
+    });
+  }
+
+  Future<void> _saveIntakeTimeWindow(int minutes) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('intake_time_window_minutes', minutes);
+    setState(() {
+      _intakeTimeWindowMinutes = minutes;
+    });
   }
 
   Future<void> _showBackupQr() async {
@@ -545,6 +565,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               if (choice != null) {
                 LanguageController.instance.setLanguage(choice);
+              }
+            },
+          ),
+
+          const Divider(),
+
+          // Medications section
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              Translations.medicationsSection,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.schedule_outlined),
+            title: Text(Translations.intakeTimeWindow),
+            subtitle: Text(
+              Translations.intakeTimeWindowDescription(
+                _intakeTimeWindowMinutes,
+              ),
+            ),
+            trailing: Text(
+              Translations.intakeTimeWindowMinutes(_intakeTimeWindowMinutes),
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            onTap: () async {
+              final choice = await showModalBottomSheet<int>(
+                context: context,
+                builder: (context) {
+                  return SafeArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(
+                            Translations.intakeTimeWindow,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        for (final minutes in [15, 30, 45, 60, 90, 120])
+                          ListTile(
+                            title: Text(
+                              Translations.intakeTimeWindowMinutes(minutes),
+                            ),
+                            leading: minutes == _intakeTimeWindowMinutes
+                                ? const Icon(Icons.check)
+                                : null,
+                            onTap: () => Navigator.pop(context, minutes),
+                          ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  );
+                },
+              );
+
+              if (choice != null) {
+                await _saveIntakeTimeWindow(choice);
               }
             },
           ),

@@ -204,6 +204,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   // 0 = Medicine Tracker, 1 = Drugstore Map
   int _selectedIndex = 0;
   bool _notificationsEnabled = true;
+  int _intakeTimeWindowMinutes = 60; // Default: 60 minutes before/after
   String _userName = '';
   late PageController _pageController;
   final MedicationRepository _medicationRepository = MedicationRepository();
@@ -230,9 +231,12 @@ class _DashboardScreenState extends State<DashboardScreen>
     final name = prefs.getString('user_name') ?? '';
     final notif =
         prefs.getBool('notifications_enabled') ?? _notificationsEnabled;
+    final intakeWindow =
+        prefs.getInt('intake_time_window_minutes') ?? _intakeTimeWindowMinutes;
     setState(() {
       _userName = name;
       _notificationsEnabled = notif;
+      _intakeTimeWindowMinutes = intakeWindow;
     });
     await _syncNotifications();
   }
@@ -342,7 +346,47 @@ class _DashboardScreenState extends State<DashboardScreen>
         return;
       }
 
-      final updatedMedication = medications[index].recordIntake(DateTime.now());
+      final medication = medications[index];
+
+      // Check if already taken today
+      if (medication.isTakenToday()) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(Translations.medicationAlreadyTaken)),
+        );
+        return;
+      }
+
+      // Check if within intake window
+      final isWithinWindow = medication.isWithinIntakeWindow(
+        windowMinutes: _intakeTimeWindowMinutes,
+      );
+
+      if (!isWithinWindow) {
+        final minutesUntil = medication.minutesUntilIntakeWindow(
+          windowMinutes: _intakeTimeWindowMinutes,
+        );
+
+        if (minutesUntil != null) {
+          // Too early to take
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(Translations.cannotTakeMedicationYet(minutesUntil)),
+            ),
+          );
+          return;
+        } else {
+          // Window has passed - allow with warning
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(Translations.intakeWindowPassed)),
+          );
+          // Continue to record intake anyway
+        }
+      }
+
+      final updatedMedication = medication.recordIntake(DateTime.now());
 
       medications[index] = updatedMedication;
       await _medicationRepository.saveMedications(medications);
@@ -996,12 +1040,72 @@ class _DashboardScreenState extends State<DashboardScreen>
     final badgeIcon = _iconForPeriod(medication.period);
     final formattedTime = medication.time.format(context);
 
+    // Determine the state of the medication
+    final isTakenToday = medication.isTakenToday();
+    final isWithinWindow = medication.isWithinIntakeWindow(
+      windowMinutes: _intakeTimeWindowMinutes,
+    );
+    final minutesUntil = medication.minutesUntilIntakeWindow(
+      windowMinutes: _intakeTimeWindowMinutes,
+    );
+
+    // Determine the checkbox appearance based on state
+    Widget checkboxWidget;
+    if (isMarking) {
+      checkboxWidget = Padding(
+        padding: const EdgeInsets.all(8),
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+        ),
+      );
+    } else if (isTakenToday) {
+      // Already taken - show filled green checkbox, disabled
+      checkboxWidget = Icon(Icons.check_box, size: 24, color: Colors.green);
+    } else if (isWithinWindow) {
+      // Within window - normal clickable checkbox
+      checkboxWidget = IconButton(
+        tooltip: Translations.markMedicationTaken,
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          Icons.check_box_outline_blank,
+          size: 20,
+          color: theme.colorScheme.primary,
+        ),
+        onPressed: onMarkTaken,
+      );
+    } else if (minutesUntil != null) {
+      // Too early - show lock icon with gray color
+      checkboxWidget = Tooltip(
+        message: Translations.cannotTakeMedicationYet(minutesUntil),
+        child: Icon(
+          Icons.lock_clock,
+          size: 20,
+          color: theme.colorScheme.outline,
+        ),
+      );
+    } else {
+      // Window passed - show clickable but with warning style
+      checkboxWidget = IconButton(
+        tooltip: Translations.intakeWindowPassed,
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          Icons.check_box_outline_blank,
+          size: 20,
+          color: Colors.orange,
+        ),
+        onPressed: onMarkTaken,
+      );
+    }
+
     return GestureDetector(
       onTap: onEdit,
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: isTakenToday
+              ? theme.colorScheme.surfaceContainerHighest.withOpacity(0.5)
+              : theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
@@ -1017,10 +1121,15 @@ class _DashboardScreenState extends State<DashboardScreen>
               height: 48,
               width: 48,
               decoration: BoxDecoration(
-                color: badgeColor,
+                color: isTakenToday ? badgeColor.withOpacity(0.5) : badgeColor,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(badgeIcon, color: theme.colorScheme.onSurface),
+              child: Icon(
+                badgeIcon,
+                color: isTakenToday
+                    ? theme.colorScheme.onSurface.withOpacity(0.5)
+                    : theme.colorScheme.onSurface,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1029,13 +1138,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                 children: [
                   Text(
                     '${medication.name}, ${medication.dose}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      decoration: isTakenToday
+                          ? TextDecoration.lineThrough
+                          : null,
+                      color: isTakenToday
+                          ? theme.colorScheme.onSurface.withOpacity(0.5)
+                          : null,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     formattedTime,
                     style: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color: isTakenToday
+                          ? theme.colorScheme.onSurfaceVariant.withOpacity(0.5)
+                          : theme.colorScheme.onSurfaceVariant,
                       fontSize: 13,
                     ),
                   ),
@@ -1045,7 +1164,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                       child: Text(
                         medication.notes!,
                         style: TextStyle(
-                          color: theme.colorScheme.onSurfaceVariant,
+                          color: isTakenToday
+                              ? theme.colorScheme.onSurfaceVariant.withOpacity(
+                                  0.5,
+                                )
+                              : theme.colorScheme.onSurfaceVariant,
                           fontSize: 12,
                         ),
                       ),
@@ -1058,29 +1181,19 @@ class _DashboardScreenState extends State<DashboardScreen>
               height: 36,
               width: 36,
               decoration: BoxDecoration(
-                border: Border.all(color: theme.colorScheme.outlineVariant),
+                border: Border.all(
+                  color: isTakenToday
+                      ? Colors.green.withOpacity(0.5)
+                      : (isWithinWindow
+                            ? theme.colorScheme.primary.withOpacity(0.5)
+                            : theme.colorScheme.outlineVariant),
+                ),
                 borderRadius: BorderRadius.circular(8),
+                color: isTakenToday
+                    ? Colors.green.withOpacity(0.1)
+                    : Colors.transparent,
               ),
-              child: isMarking
-                  ? Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          theme.colorScheme.primary,
-                        ),
-                      ),
-                    )
-                  : IconButton(
-                      tooltip: Translations.markMedicationTaken,
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        Icons.check_box_outline_blank,
-                        size: 20,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      onPressed: onMarkTaken,
-                    ),
+              child: checkboxWidget,
             ),
           ],
         ),

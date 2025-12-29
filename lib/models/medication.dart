@@ -16,9 +16,11 @@ class Medication {
     this.totalQuantity,
     int? remainingQuantity,
     List<DateTime>? intakeHistory,
-  })  : createdAt = createdAt ?? DateTime.now(),
-        remainingQuantity = remainingQuantity ?? totalQuantity,
-        intakeHistory = List<DateTime>.unmodifiable(intakeHistory ?? const <DateTime>[]);
+  }) : createdAt = createdAt ?? DateTime.now(),
+       remainingQuantity = remainingQuantity ?? totalQuantity,
+       intakeHistory = List<DateTime>.unmodifiable(
+         intakeHistory ?? const <DateTime>[],
+       );
 
   final String name;
   final String dose;
@@ -40,7 +42,9 @@ class Medication {
     final rawPeriod = json['period'];
 
     if (rawName is! String || rawDose is! String || rawTime is! String) {
-      throw const FormatException('Medication json missing required string fields');
+      throw const FormatException(
+        'Medication json missing required string fields',
+      );
     }
 
     final time = _parseTime(rawTime);
@@ -53,7 +57,9 @@ class Medication {
       period: period,
       notes: json['notes'] as String?,
       isEnabled: json['isEnabled'] is bool ? json['isEnabled'] as bool : true,
-      isHistoric: json['isHistoric'] is bool ? json['isHistoric'] as bool : false,
+      isHistoric: json['isHistoric'] is bool
+          ? json['isHistoric'] as bool
+          : false,
       createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
       courseEndDate: _parseDateTime(json['courseEndDate']),
       totalQuantity: _parseInt(json['totalQuantity']),
@@ -63,23 +69,23 @@ class Medication {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'name': name,
-        'dose': dose,
-        'time': _formatTime(time),
-        'period': _formatPeriod(period),
-        if (notes != null) 'notes': notes,
-        'isEnabled': isEnabled,
-        'isHistoric': isHistoric,
-        'createdAt': createdAt.toIso8601String(),
-        if (courseEndDate != null)
-          'courseEndDate': courseEndDate!.toIso8601String(),
-        if (totalQuantity != null) 'totalQuantity': totalQuantity,
-        if (remainingQuantity != null) 'remainingQuantity': remainingQuantity,
-        if (intakeHistory.isNotEmpty)
-          'intakeHistory': intakeHistory
-              .map((dt) => dt.toIso8601String())
-              .toList(growable: false),
-      };
+    'name': name,
+    'dose': dose,
+    'time': _formatTime(time),
+    'period': _formatPeriod(period),
+    if (notes != null) 'notes': notes,
+    'isEnabled': isEnabled,
+    'isHistoric': isHistoric,
+    'createdAt': createdAt.toIso8601String(),
+    if (courseEndDate != null)
+      'courseEndDate': courseEndDate!.toIso8601String(),
+    if (totalQuantity != null) 'totalQuantity': totalQuantity,
+    if (remainingQuantity != null) 'remainingQuantity': remainingQuantity,
+    if (intakeHistory.isNotEmpty)
+      'intakeHistory': intakeHistory
+          .map((dt) => dt.toIso8601String())
+          .toList(growable: false),
+  };
 
   Medication copyWith({
     String? name,
@@ -107,8 +113,9 @@ class Medication {
       courseEndDate: courseEndDate ?? this.courseEndDate,
       totalQuantity: totalQuantity ?? this.totalQuantity,
       remainingQuantity: remainingQuantity ?? this.remainingQuantity,
-      intakeHistory:
-          intakeHistory != null ? List<DateTime>.unmodifiable(intakeHistory) : this.intakeHistory,
+      intakeHistory: intakeHistory != null
+          ? List<DateTime>.unmodifiable(intakeHistory)
+          : this.intakeHistory,
     );
   }
 
@@ -122,8 +129,10 @@ class Medication {
       }
     }
 
-    final bool supplyFinished = updatedRemaining != null && updatedRemaining <= 0;
-    final bool courseFinished = courseEndDate != null && !timestamp.isBefore(courseEndDate!);
+    final bool supplyFinished =
+        updatedRemaining != null && updatedRemaining <= 0;
+    final bool courseFinished =
+        courseEndDate != null && !timestamp.isBefore(courseEndDate!);
     final bool shouldArchive = supplyFinished || courseFinished;
 
     return copyWith(
@@ -134,21 +143,91 @@ class Medication {
     );
   }
 
-  DateTime? get lastIntake =>
-      intakeHistory.isEmpty ? null : intakeHistory.reduce((a, b) => a.isAfter(b) ? a : b);
+  DateTime? get lastIntake => intakeHistory.isEmpty
+      ? null
+      : intakeHistory.reduce((a, b) => a.isAfter(b) ? a : b);
 
   bool get hasLowStock {
-    if (remainingQuantity == null || totalQuantity == null || totalQuantity! <= 0) {
+    if (remainingQuantity == null ||
+        totalQuantity == null ||
+        totalQuantity! <= 0) {
       return false;
     }
     final threshold = (totalQuantity! * 0.2).ceil().clamp(1, totalQuantity!);
     return remainingQuantity! <= threshold;
   }
 
+  /// Returns true if the medication was already taken today for its scheduled time.
+  bool isTakenToday() {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+
+    return intakeHistory.any(
+      (intake) => intake.isAfter(todayStart) && intake.isBefore(todayEnd),
+    );
+  }
+
+  /// Returns true if current time is within the allowed intake window.
+  /// [windowMinutes] - configurable window (default 60 minutes before/after scheduled time)
+  bool isWithinIntakeWindow({int windowMinutes = 60}) {
+    final now = DateTime.now();
+    final scheduledTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+    final windowStart = scheduledTime.subtract(
+      Duration(minutes: windowMinutes),
+    );
+    final windowEnd = scheduledTime.add(Duration(minutes: windowMinutes));
+
+    return now.isAfter(windowStart) && now.isBefore(windowEnd);
+  }
+
+  /// Returns how many minutes until the intake window opens.
+  /// Returns null if already in window or past the window.
+  int? minutesUntilIntakeWindow({int windowMinutes = 60}) {
+    final now = DateTime.now();
+    final scheduledTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+    final windowStart = scheduledTime.subtract(
+      Duration(minutes: windowMinutes),
+    );
+
+    if (now.isBefore(windowStart)) {
+      return windowStart.difference(now).inMinutes;
+    }
+    return null;
+  }
+
+  /// Returns true if the intake window has already passed for today.
+  bool hasIntakeWindowPassed({int windowMinutes = 60}) {
+    final now = DateTime.now();
+    final scheduledTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+    final windowEnd = scheduledTime.add(Duration(minutes: windowMinutes));
+
+    return now.isAfter(windowEnd);
+  }
+
   bool get isCourseActive {
     final supplyAvailable = remainingQuantity == null || remainingQuantity! > 0;
     final now = DateTime.now();
-    final withinCourse = courseEndDate == null ||
+    final withinCourse =
+        courseEndDate == null ||
         now.isBefore(courseEndDate!) ||
         now.isAtSameMomentAs(courseEndDate!);
     return isEnabled && !isHistoric && supplyAvailable && withinCourse;

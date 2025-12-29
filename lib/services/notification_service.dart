@@ -402,6 +402,14 @@ class NotificationService {
   }
 
   Future<void> _scheduleMedication(int id, Medication medication) async {
+    // Skip if already taken today - no need for notification
+    if (medication.isTakenToday()) {
+      debugPrint(
+        'NotificationService: ${medication.name} already taken today, skipping notification',
+      );
+      return;
+    }
+
     final scheduleDate = _nextInstanceOfTime(medication.time);
 
     final details = NotificationDetails(
@@ -417,6 +425,7 @@ class NotificationService {
       macOS: const DarwinNotificationDetails(),
     );
 
+    // Schedule primary notification (daily repeating)
     await _plugin.zonedSchedule(
       id,
       Translations.reminderTitle(medication.name),
@@ -434,6 +443,33 @@ class NotificationService {
     debugPrint(
       'NotificationService: scheduled ${medication.name} (${medication.dose}) for $readable with id $id',
     );
+
+    // Schedule follow-up notification 1 hour after scheduled time
+    // Only schedule if the scheduled time is in the future or within the next hour
+    final now = tz.TZDateTime.now(tz.local);
+    final followUpDate = scheduleDate.add(const Duration(hours: 1));
+
+    // Only schedule follow-up if it's for today or tomorrow (not for past times)
+    if (followUpDate.isAfter(now)) {
+      final followUpId = id + 10000; // Use offset for follow-up IDs
+
+      await _plugin.zonedSchedule(
+        followUpId,
+        Translations.reminderFollowUpTitle(medication.name),
+        Translations.reminderFollowUpBody(medication.dose),
+        followUpDate,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        // Use dateAndTime so it fires only once, not daily
+        matchDateTimeComponents: DateTimeComponents.dateAndTime,
+      );
+
+      debugPrint(
+        'NotificationService: scheduled follow-up for ${medication.name} at ${followUpDate.toString()} with id $followUpId',
+      );
+    }
   }
 
   tz.TZDateTime _nextInstanceOfTime(TimeOfDay time) {

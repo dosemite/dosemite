@@ -446,6 +446,47 @@ class Translations {
 
   static String get km => _getText('km', 'km');
 
+  // Intake Time Window Settings
+  static String get medicationsSection => _getText('Medications', 'İlaçlar');
+
+  static String get intakeTimeWindow =>
+      _getText('Intake time window', 'İlaç alma zaman penceresi');
+
+  static String intakeTimeWindowMinutes(int minutes) =>
+      _getText('$minutes minutes', '$minutes dakika');
+
+  static String intakeTimeWindowDescription(int minutes) => _getText(
+    'You can take medications $minutes min before or after the scheduled time',
+    'İlaçları planlanan zamandan $minutes dk önce veya sonra alabilirsiniz',
+  );
+
+  // Intake Restrictions
+  static String get medicationAlreadyTaken => _getText(
+    'This medication was already taken today',
+    'Bu ilaç bugün zaten alındı',
+  );
+
+  static String cannotTakeMedicationYet(int minutes) => _getText(
+    'Too early! Wait $minutes more minutes',
+    'Çok erken! $minutes dakika daha bekleyin',
+  );
+
+  static String get intakeWindowPassed => _getText(
+    'The intake window has passed. Taking anyway...',
+    'Alma zamanı geçti. Yine de alınıyor...',
+  );
+
+  // Follow-up Notifications
+  static String reminderFollowUpTitle(String medicationName) => _getText(
+    'Reminder: $medicationName not taken yet',
+    'Hatırlatma: $medicationName henüz alınmadı',
+  );
+
+  static String reminderFollowUpBody(String dose) => _getText(
+    "You haven't taken your medication. Dose: $dose",
+    'İlacınızı henüz almadınız. Doz: $dose',
+  );
+
   static String _getText(String english, String turkish) {
     final isTurkish = LanguageController.instance.value == AppLanguage.turkish;
     return isTurkish ? turkish : english;

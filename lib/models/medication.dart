@@ -16,6 +16,8 @@ class Medication {
     this.totalQuantity,
     int? remainingQuantity,
     List<DateTime>? intakeHistory,
+    this.assignee,
+    this.intervalDays = 1,
   }) : createdAt = createdAt ?? DateTime.now(),
        remainingQuantity = remainingQuantity ?? totalQuantity,
        intakeHistory = List<DateTime>.unmodifiable(
@@ -34,6 +36,8 @@ class Medication {
   final int? totalQuantity;
   final int? remainingQuantity;
   final List<DateTime> intakeHistory;
+  final String? assignee; // null = self, or name of person
+  final int intervalDays; // 1 = daily, 2 = every 2 days, etc.
 
   /// Backward compatibility: returns the first time in the list
   TimeOfDay get time =>
@@ -80,6 +84,8 @@ class Medication {
       totalQuantity: _parseInt(json['totalQuantity']),
       remainingQuantity: _parseInt(json['remainingQuantity']),
       intakeHistory: _parseHistory(json['intakeHistory']),
+      assignee: json['assignee'] as String?,
+      intervalDays: _parseInt(json['intervalDays']) ?? 1,
     );
   }
 
@@ -100,6 +106,8 @@ class Medication {
       'intakeHistory': intakeHistory
           .map((dt) => dt.toIso8601String())
           .toList(growable: false),
+    if (assignee != null) 'assignee': assignee,
+    'intervalDays': intervalDays,
   };
 
   Medication copyWith({
@@ -115,6 +123,8 @@ class Medication {
     int? totalQuantity,
     int? remainingQuantity,
     List<DateTime>? intakeHistory,
+    String? assignee,
+    int? intervalDays,
   }) {
     return Medication(
       name: name ?? this.name,
@@ -131,6 +141,8 @@ class Medication {
       intakeHistory: intakeHistory != null
           ? List<DateTime>.unmodifiable(intakeHistory)
           : this.intakeHistory,
+      assignee: assignee ?? this.assignee,
+      intervalDays: intervalDays ?? this.intervalDays,
     );
   }
 
@@ -161,6 +173,16 @@ class Medication {
   DateTime? get lastIntake => intakeHistory.isEmpty
       ? null
       : intakeHistory.reduce((a, b) => a.isAfter(b) ? a : b);
+
+  bool get wasTakenToday {
+    if (intakeHistory.isEmpty) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return intakeHistory.any((intake) {
+      final intakeDate = DateTime(intake.year, intake.month, intake.day);
+      return intakeDate.isAtSameMomentAs(today);
+    });
+  }
 
   bool get hasLowStock {
     if (remainingQuantity == null ||

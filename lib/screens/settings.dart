@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flex_color_picker/flex_color_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -613,8 +614,208 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() {
                 _materialYou = v;
                 ThemeController.instance.setMaterialYou(v);
+                // Clear custom color when Material You is enabled
+                if (v && ThemeController.instance.customSeedColor != null) {
+                  ThemeController.instance.setCustomColor(null);
+                }
               });
             },
+          ),
+
+          const Divider(),
+
+          // Customization section
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text(
+              'Customization',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+
+          // Custom Color Picker
+          ListTile(
+            enabled: !_materialYou,
+            leading: Icon(
+              Icons.palette_outlined,
+              color: _materialYou
+                  ? null
+                  : ThemeController.instance.customSeedColor,
+            ),
+            title: const Text('Theme Color'),
+            subtitle: Text(
+              _materialYou
+                  ? 'Disable Material You to use custom colors'
+                  : (ThemeController.instance.customSeedColor == null
+                        ? 'Default color'
+                        : 'Custom color selected'),
+            ),
+            trailing: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color:
+                    ThemeController.instance.customSeedColor ??
+                    Theme.of(context).colorScheme.primary,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 2,
+                ),
+              ),
+            ),
+            onTap: _materialYou
+                ? null
+                : () async {
+                    Color? pickedColor =
+                        ThemeController.instance.customSeedColor;
+
+                    await ColorPicker(
+                      color:
+                          pickedColor ?? Theme.of(context).colorScheme.primary,
+                      onColorChanged: (Color color) {
+                        pickedColor = color;
+                      },
+                      heading: const Text('Select theme color'),
+                      subheading: const Text('Select a shade'),
+                      pickersEnabled: const <ColorPickerType, bool>{
+                        ColorPickerType.both: false,
+                        ColorPickerType.primary: true,
+                        ColorPickerType.accent: true,
+                        ColorPickerType.custom: false,
+                        ColorPickerType.wheel: false,
+                      },
+                      actionButtons: const ColorPickerActionButtons(
+                        dialogActionButtons: true,
+                      ),
+                    ).showPickerDialog(context).then((didPick) {
+                      if (didPick && pickedColor != null) {
+                        setState(() {
+                          ThemeController.instance.setCustomColor(pickedColor);
+                        });
+                      }
+                    });
+                  },
+          ),
+
+          // Reset color button
+          if (ThemeController.instance.customSeedColor != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    ThemeController.instance.setCustomColor(null);
+                  });
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reset to default'),
+              ),
+            ),
+
+          const Divider(),
+
+          // Font Family Selector
+          ListTile(
+            leading: const Icon(Icons.font_download_outlined),
+            title: const Text('Font Family'),
+            subtitle: Text(
+              ThemeController.instance.customFontFamily ?? 'System Default',
+            ),
+            trailing: const Icon(Icons.arrow_drop_down),
+            onTap: () async {
+              final fonts = <String?>[
+                null, // System default
+                'Roboto',
+                'Open Sans',
+                'Lato',
+                'Montserrat',
+                'Poppins',
+                'Inter',
+                'Plus Jakarta Sans',
+              ];
+
+              final labels = <String>[
+                'System Default',
+                'Roboto',
+                'Open Sans',
+                'Lato',
+                'Montserrat',
+                'Poppins',
+                'Inter',
+                'Plus Jakarta Sans',
+              ];
+
+              final choice = await showModalBottomSheet<String?>(
+                context: context,
+                builder: (context) {
+                  return SafeArea(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: fonts.length,
+                      itemBuilder: (context, index) {
+                        final font = fonts[index];
+                        final label = labels[index];
+                        final isSelected =
+                            font == ThemeController.instance.customFontFamily;
+
+                        return ListTile(
+                          title: Text(
+                            label,
+                            style: font != null
+                                ? TextStyle(fontFamily: font)
+                                : null,
+                          ),
+                          leading: isSelected ? const Icon(Icons.check) : null,
+                          onTap: () => Navigator.pop(context, font),
+                        );
+                      },
+                    ),
+                  );
+                },
+              );
+
+              if (choice != null || choice == null && mounted) {
+                setState(() {
+                  ThemeController.instance.setFontFamily(choice);
+                });
+              }
+            },
+          ),
+
+          const Divider(),
+
+          // Font Size Slider
+          ListTile(
+            leading: const Icon(Icons.format_size),
+            title: const Text('Font Size'),
+            subtitle: Text(
+              '${(ThemeController.instance.customFontSize * 100).round()}%',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Text('A', style: TextStyle(fontSize: 12)),
+                Expanded(
+                  child: Slider(
+                    value: ThemeController.instance.customFontSize,
+                    min: 0.8,
+                    max: 1.3,
+                    divisions: 10,
+                    label:
+                        '${(ThemeController.instance.customFontSize * 100).round()}%',
+                    onChanged: (value) {
+                      setState(() {
+                        ThemeController.instance.setFontSize(value);
+                      });
+                    },
+                  ),
+                ),
+                const Text('A', style: TextStyle(fontSize: 20)),
+              ],
+            ),
           ),
 
           const Divider(),

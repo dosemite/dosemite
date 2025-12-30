@@ -51,6 +51,8 @@ dependencies:
   geolocator: ^13.0.2
   http: ^1.2.2
   mongo_dart: ^0.10.3
+  google_fonts: ^6.2.1
+  flex_color_picker: ^3.6.0
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'data/medication_repository.dart';
 import 'screens/intro.dart';
 import 'screens/drugstore_map.dart';
@@ -52,37 +53,118 @@ class _PharmacyAppState extends State<PharmacyApp> {
         ? Brightness.light
         : Brightness.dark;
     final materialYou = ThemeController.instance.materialYou;
+    final customColor = ThemeController.instance.customSeedColor;
+    final customFont = ThemeController.instance.customFontFamily;
+    final fontSize = ThemeController.instance.customFontSize;
 
-    // Use dynamic color if available and Material You is enabled
-    if (materialYou && dynamicColorScheme != null) {
+    // Helper to apply custom text theme
+    TextTheme _applyCustomTextTheme(TextTheme base) {
+      if (customFont == null && fontSize == 1.0) return base;
+
+      TextTheme themed = base;
+      if (customFont != null) {
+        themed = GoogleFonts.getTextTheme(customFont, base);
+      }
+      if (fontSize != 1.0) {
+        // Manually scale font sizes to avoid null assertion errors
+        themed = themed.copyWith(
+          displayLarge: themed.displayLarge?.copyWith(
+            fontSize: (themed.displayLarge?.fontSize ?? 57) * fontSize,
+          ),
+          displayMedium: themed.displayMedium?.copyWith(
+            fontSize: (themed.displayMedium?.fontSize ?? 45) * fontSize,
+          ),
+          displaySmall: themed.displaySmall?.copyWith(
+            fontSize: (themed.displaySmall?.fontSize ?? 36) * fontSize,
+          ),
+          headlineLarge: themed.headlineLarge?.copyWith(
+            fontSize: (themed.headlineLarge?.fontSize ?? 32) * fontSize,
+          ),
+          headlineMedium: themed.headlineMedium?.copyWith(
+            fontSize: (themed.headlineMedium?.fontSize ?? 28) * fontSize,
+          ),
+          headlineSmall: themed.headlineSmall?.copyWith(
+            fontSize: (themed.headlineSmall?.fontSize ?? 24) * fontSize,
+          ),
+          titleLarge: themed.titleLarge?.copyWith(
+            fontSize: (themed.titleLarge?.fontSize ?? 22) * fontSize,
+          ),
+          titleMedium: themed.titleMedium?.copyWith(
+            fontSize: (themed.titleMedium?.fontSize ?? 16) * fontSize,
+          ),
+          titleSmall: themed.titleSmall?.copyWith(
+            fontSize: (themed.titleSmall?.fontSize ?? 14) * fontSize,
+          ),
+          bodyLarge: themed.bodyLarge?.copyWith(
+            fontSize: (themed.bodyLarge?.fontSize ?? 16) * fontSize,
+          ),
+          bodyMedium: themed.bodyMedium?.copyWith(
+            fontSize: (themed.bodyMedium?.fontSize ?? 14) * fontSize,
+          ),
+          bodySmall: themed.bodySmall?.copyWith(
+            fontSize: (themed.bodySmall?.fontSize ?? 12) * fontSize,
+          ),
+          labelLarge: themed.labelLarge?.copyWith(
+            fontSize: (themed.labelLarge?.fontSize ?? 14) * fontSize,
+          ),
+          labelMedium: themed.labelMedium?.copyWith(
+            fontSize: (themed.labelMedium?.fontSize ?? 12) * fontSize,
+          ),
+          labelSmall: themed.labelSmall?.copyWith(
+            fontSize: (themed.labelSmall?.fontSize ?? 11) * fontSize,
+          ),
+        );
+      }
+      return themed;
+    }
+
+    // Determine effective seed color
+    final effectiveSeedColor =
+        customColor ??
+        (materialYou
+            ? Colors.deepPurple
+            : (t == AppTheme.light ? Colors.blue : Colors.blueGrey));
+
+    // Use dynamic color if available and Material You is enabled (but not if custom color is set)
+    if (materialYou && dynamicColorScheme != null && customColor == null) {
+      // Fix Material You text readability by ensuring high contrast in dark themes
+      final fixedColorScheme = brightness == Brightness.dark
+          ? dynamicColorScheme.copyWith(
+              // Primary text colors
+              onSurface: Colors.white,
+              onSurfaceVariant: Colors.white.withOpacity(0.8),
+              onBackground: Colors.white,
+              // Secondary text and icons
+              onPrimary: Colors.white,
+              onSecondary: Colors.white,
+              onTertiary: Colors.white,
+              // Container colors
+              onPrimaryContainer: Colors.white,
+              onSecondaryContainer: Colors.white,
+              onTertiaryContainer: Colors.white,
+              onErrorContainer: Colors.white,
+            )
+          : dynamicColorScheme;
+
       final base = ThemeData(
-        colorScheme: dynamicColorScheme,
+        colorScheme: fixedColorScheme,
         useMaterial3: true,
-      );
-
-      if (t == AppTheme.amoled) {
-        return base.copyWith(
-          scaffoldBackgroundColor: Colors.black,
-          canvasColor: Colors.black,
-          cardColor: Colors.grey[900],
-        );
-      }
-
-      if (t == AppTheme.darkGray) {
-        return base.copyWith(scaffoldBackgroundColor: Colors.grey[900]);
-      }
-
-      return base;
-    }
-
-    // Fallback to static colors when dynamic colors are not available or Material You is disabled
-    if (materialYou) {
-      final base = ThemeData.from(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: brightness,
+        textTheme: _applyCustomTextTheme(
+          brightness == Brightness.dark
+              ? ThemeData.dark().textTheme.apply(
+                  displayColor: Colors.white,
+                  bodyColor: Colors.white,
+                )
+              : ThemeData.light().textTheme,
         ),
-        useMaterial3: true,
+        snackBarTheme: const SnackBarThemeData(
+          behavior: SnackBarBehavior.floating,
+          insetPadding: EdgeInsets.only(
+            bottom: 100, // Above FAB + bottom nav
+            left: 16,
+            right: 16,
+          ),
+        ),
       );
 
       if (t == AppTheme.amoled) {
@@ -100,35 +182,42 @@ class _PharmacyAppState extends State<PharmacyApp> {
       return base;
     }
 
-    // Non-Material-You themes
-    switch (t) {
-      case AppTheme.light:
-        return ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-          useMaterial3: true,
-          brightness: Brightness.light,
-        );
-      case AppTheme.darkGray:
-        return ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.blueGrey,
-            brightness: Brightness.dark,
-          ),
-          useMaterial3: true,
-          scaffoldBackgroundColor: Colors.grey[900],
-        );
-      case AppTheme.amoled:
-        return ThemeData(
-          colorScheme: ColorScheme.dark(
-            surface: Colors.black,
-            primary: Colors.tealAccent,
-          ),
-          useMaterial3: true,
-          scaffoldBackgroundColor: Colors.black,
-          canvasColor: Colors.black,
-          cardColor: Colors.grey[900],
-        );
+    // Use custom or fallback colors
+    final baseTheme = ThemeData.from(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: effectiveSeedColor,
+        brightness: brightness,
+      ),
+      useMaterial3: true,
+    );
+
+    final customizedTheme = baseTheme.copyWith(
+      textTheme: _applyCustomTextTheme(baseTheme.textTheme),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        insetPadding: EdgeInsets.only(
+          bottom: 100, // Above FAB + bottom nav
+          left: 16,
+          right: 16,
+        ),
+      ),
+    );
+
+    if (t == AppTheme.amoled) {
+      return customizedTheme.copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        canvasColor: Colors.black,
+        cardColor: Colors.grey[900],
+      );
     }
+
+    if (t == AppTheme.darkGray) {
+      return customizedTheme.copyWith(
+        scaffoldBackgroundColor: Colors.grey[900],
+      );
+    }
+
+    return customizedTheme;
   }
 
   @override
@@ -211,6 +300,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   final Set<int> _markingMedicationIndices = <int>{};
   List<Medication>? _latestMedications;
 
+  // Search functionality
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -222,6 +315,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   @override
   void dispose() {
     _pageController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -456,7 +550,11 @@ class _DashboardScreenState extends State<DashboardScreen>
 
       // Check all times for this medication
       for (final time in med.times) {
-        final nextOccurrence = _nextOccurrenceFor(time, now);
+        final nextOccurrence = _nextOccurrenceFor(
+          time,
+          now,
+          intervalDays: med.intervalDays,
+        );
         var diff = nextOccurrence.difference(now);
         if (diff.isNegative) {
           diff = Duration.zero;
@@ -476,7 +574,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Translations.nextMedicationIn(formatted);
   }
 
-  DateTime _nextOccurrenceFor(TimeOfDay time, DateTime reference) {
+  DateTime _nextOccurrenceFor(
+    TimeOfDay time,
+    DateTime reference, {
+    int intervalDays = 1,
+  }) {
     final candidate = DateTime(
       reference.year,
       reference.month,
@@ -489,7 +591,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       return candidate;
     }
 
-    return candidate.add(const Duration(days: 1));
+    return candidate.add(Duration(days: intervalDays));
   }
 
   String _formatDuration(Duration duration) {
@@ -528,6 +630,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         : const <Medication>[];
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       // We use a custom top area instead of AppBar to match the expressive layout
       body: SafeArea(
         child: Column(
@@ -638,6 +741,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) {
+                            setState(() {
+                              _searchQuery = value.toLowerCase();
+                            });
+                          },
                           decoration: InputDecoration(
                             hintText: Translations.searchMedications,
                             prefixIcon: const Icon(Icons.search),
@@ -689,7 +798,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                   // Dashboard content
                   SingleChildScrollView(
                     key: const PageStorageKey('dashboard'),
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      // Dynamic bottom padding: base padding + FAB height + extra space
+                      // Add keyboard height if keyboard is visible
+                      16 + 68 + 24 + MediaQuery.of(context).viewInsets.bottom,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -743,7 +859,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                             for (var i = 0; i < allMedications.length; i++) {
                               final med = allMedications[i];
                               if (med.isCourseActive) {
-                                activeEntries.add(MapEntry(i, med));
+                                // Apply search filter
+                                if (_searchQuery.isEmpty ||
+                                    med.name.toLowerCase().contains(
+                                      _searchQuery,
+                                    ) ||
+                                    med.dose.toLowerCase().contains(
+                                      _searchQuery,
+                                    )) {
+                                  activeEntries.add(MapEntry(i, med));
+                                }
                               }
                             }
 
@@ -932,15 +1057,29 @@ class _DashboardScreenState extends State<DashboardScreen>
       final meds = section.value;
       for (var j = 0; j < meds.length; j++) {
         final entry = meds[j];
-        children.add(
-          _medCard(
-            context,
-            entry.value,
-            onMarkTaken: () => _markMedicationTaken(entry.key),
-            onEdit: () => _onEditMedication(entry.value),
-            isMarking: _markingMedicationIndices.contains(entry.key),
-          ),
-        );
+        final medication = entry.value;
+
+        // Create a separate card for each time
+        for (
+          var timeIndex = 0;
+          timeIndex < medication.times.length;
+          timeIndex++
+        ) {
+          final specificTime = medication.times[timeIndex];
+          children.add(
+            _medCard(
+              context,
+              medication,
+              specificTime: specificTime,
+              onMarkTaken: () => _markMedicationTaken(entry.key),
+              onEdit: () => _onEditMedication(medication),
+              isMarking: _markingMedicationIndices.contains(entry.key),
+            ),
+          );
+          if (timeIndex < medication.times.length - 1) {
+            children.add(const SizedBox(height: 12));
+          }
+        }
         if (j < meds.length - 1) {
           children.add(const SizedBox(height: 12));
         }
@@ -990,6 +1129,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _medCard(
     BuildContext context,
     Medication medication, {
+    TimeOfDay? specificTime,
     VoidCallback? onMarkTaken,
     VoidCallback? onEdit,
     bool isMarking = false,
@@ -997,10 +1137,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     final theme = Theme.of(context);
     final badgeColor = _badgeColorForPeriod(medication.period, theme);
     final badgeIcon = _iconForPeriod(medication.period);
-    // Format all times as comma-separated list
-    final formattedTimes = medication.times
-        .map((t) => t.format(context))
-        .join(', ');
+    // Display either the specific time or all times
+    final formattedTimes = specificTime != null
+        ? specificTime.format(context)
+        : medication.times.map((t) => t.format(context)).join(', ');
 
     return GestureDetector(
       onTap: onEdit,
@@ -1034,7 +1174,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${medication.name}, ${medication.dose}',
+                    '${medication.name}, ${medication.dose}${medication.assignee != null ? " (for ${medication.assignee})" : ""}',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),
@@ -1049,28 +1189,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ),
                         ),
                       ),
-                      if (medication.timesPerDay > 1) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer
-                                .withOpacity(0.5),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            Translations.timesPerDay(medication.timesPerDay),
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                   if (medication.notes != null && medication.notes!.isNotEmpty)
@@ -1109,9 +1227,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                       tooltip: Translations.markMedicationTaken,
                       padding: EdgeInsets.zero,
                       icon: Icon(
-                        Icons.check_box_outline_blank,
+                        medication.wasTakenToday
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
                         size: 20,
-                        color: theme.colorScheme.onSurfaceVariant,
+                        color: medication.wasTakenToday
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
                       onPressed: onMarkTaken,
                     ),
@@ -1135,10 +1257,13 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
   final TextEditingController _doseController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _quantityController = TextEditingController();
+  final TextEditingController _assigneeNameController = TextEditingController();
 
   List<TimeOfDay> _selectedTimes = [];
   DateTime? _courseEndDate;
   String? _errorText;
+  bool _isForSelf = true; // true = Self, false = Other person
+  int _intervalDays = 1; // Default: daily
 
   @override
   void dispose() {
@@ -1241,6 +1366,8 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
         totalQuantity: parsedQuantity,
         remainingQuantity: parsedQuantity,
         intakeHistory: const <DateTime>[],
+        assignee: _isForSelf ? null : _assigneeNameController.text.trim(),
+        intervalDays: _intervalDays,
       ),
     );
   }
@@ -1366,6 +1493,73 @@ class _AddMedicationSheetState extends State<_AddMedicationSheet> {
                 }
               },
             ),
+            const SizedBox(height: 16),
+            Text('For whom:', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<bool>(
+                    title: const Text('Self'),
+                    value: true,
+                    groupValue: _isForSelf,
+                    onChanged: (value) {
+                      setState(() {
+                        _isForSelf = value!;
+                      });
+                    },
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<bool>(
+                    title: const Text('Other person'),
+                    value: false,
+                    groupValue: _isForSelf,
+                    onChanged: (value) {
+                      setState(() {
+                        _isForSelf = value!;
+                      });
+                    },
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+            if (!_isForSelf)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextField(
+                  controller: _assigneeNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Person\'s name',
+                    hintText: 'Enter name',
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Take every:', style: theme.textTheme.labelLarge),
+                ),
+                DropdownButton<int>(
+                  value: _intervalDays,
+                  items: const [
+                    DropdownMenuItem(value: 1, child: Text('Daily')),
+                    DropdownMenuItem(value: 2, child: Text('Every 2 days')),
+                    DropdownMenuItem(value: 3, child: Text('Every 3 days')),
+                    DropdownMenuItem(value: 7, child: Text('Weekly')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _intervalDays = value!;
+                    });
+                  },
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _notesController,
@@ -1421,10 +1615,13 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
   late final TextEditingController _doseController;
   late final TextEditingController _notesController;
   late final TextEditingController _quantityController;
+  late final TextEditingController _assigneeNameController;
 
   List<TimeOfDay> _selectedTimes = [];
   DateTime? _courseEndDate;
   String? _errorText;
+  bool _isForSelf = true;
+  int _intervalDays = 1;
 
   @override
   void initState() {
@@ -1436,8 +1633,11 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     _quantityController = TextEditingController(
       text: med.remainingQuantity?.toString() ?? '',
     );
+    _assigneeNameController = TextEditingController(text: med.assignee ?? '');
     _selectedTimes = List<TimeOfDay>.from(med.times);
     _courseEndDate = med.courseEndDate;
+    _isForSelf = med.assignee == null;
+    _intervalDays = med.intervalDays;
   }
 
   @override
@@ -1446,6 +1646,7 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
     _doseController.dispose();
     _notesController.dispose();
     _quantityController.dispose();
+    _assigneeNameController.dispose();
     super.dispose();
   }
 
@@ -1559,14 +1760,28 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
       59,
     );
 
-    final updated = widget.medication.copyWith(
+    final assigneeValue = _isForSelf
+        ? null
+        : (_assigneeNameController.text.trim().isEmpty
+              ? null
+              : _assigneeNameController.text.trim());
+
+    // Create new medication to ensure assignee can be set to null
+    final updated = Medication(
       name: name,
       dose: dose,
       times: _selectedTimes,
       period: period,
       notes: notes.isEmpty ? null : notes,
       courseEndDate: courseEnd,
+      totalQuantity: widget.medication.totalQuantity,
       remainingQuantity: parsedQuantity,
+      intakeHistory: widget.medication.intakeHistory,
+      createdAt: widget.medication.createdAt,
+      isEnabled: widget.medication.isEnabled,
+      isHistoric: widget.medication.isHistoric,
+      assignee: assigneeValue,
+      intervalDays: _intervalDays,
     );
 
     Navigator.of(
@@ -1710,6 +1925,61 @@ class _EditMedicationSheetState extends State<_EditMedicationSheet> {
                   });
                 }
               },
+            ),
+            const SizedBox(height: 16),
+            Text('For whom:', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<bool>(
+                    title: const Text('Self'),
+                    value: true,
+                    groupValue: _isForSelf,
+                    onChanged: (value) => setState(() => _isForSelf = value!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<bool>(
+                    title: const Text('Other person'),
+                    value: false,
+                    groupValue: _isForSelf,
+                    onChanged: (value) => setState(() => _isForSelf = value!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+            if (!_isForSelf)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: TextField(
+                  controller: _assigneeNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Person\'s name',
+                    hintText: 'Enter name',
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Take every:', style: theme.textTheme.labelLarge),
+                ),
+                DropdownButton<int>(
+                  value: _intervalDays,
+                  items: const [
+                    DropdownMenuItem(value: 1, child: Text('Daily')),
+                    DropdownMenuItem(value: 2, child: Text('Every 2 days')),
+                    DropdownMenuItem(value: 3, child: Text('Every 3 days')),
+                    DropdownMenuItem(value: 7, child: Text('Weekly')),
+                  ],
+                  onChanged: (value) => setState(() => _intervalDays = value!),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             TextField(

@@ -218,7 +218,7 @@ class MedicationCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${medication.name}, ${medication.dose}${medication.assignee != null ? " (for ${medication.assignee})" : ""}',
+                    '${medication.name}, ${medication.dose}${medication.assignee != null ? Translations.forPerson(medication.assignee!) : ""}',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),

@@ -449,6 +449,9 @@ class Translations {
   static String get taken => _getText('Taken', 'Alındı');
 
   // Drugstore Map
+  static String forPerson(String name) =>
+      _getText(' (for $name)', ' ($name için)');
+
   static String get nearbyPharmacies =>
       _getText('Nearby Pharmacies', 'Yakındaki Eczaneler');
 

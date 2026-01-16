@@ -456,6 +456,27 @@ class Translations {
 
   static String get km => _getText('km', 'km');
 
+  // Assignee & Frequency
+  static String get forWhom => _getText('For whom:', 'Kimin için:');
+
+  static String get self => _getText('Self', 'Kendim');
+
+  static String get otherPerson => _getText('Other person', 'Başka biri');
+
+  static String get personsName => _getText("Person's name", 'Kişinin adı');
+
+  static String get enterName => _getText('Enter name', 'İsim girin');
+
+  static String get takeEvery => _getText('Take every:', 'Kullanım sıklığı:');
+
+  static String get daily => _getText('Daily', 'Her gün');
+
+  static String get every2Days => _getText('Every 2 days', '2 günde bir');
+
+  static String get every3Days => _getText('Every 3 days', '3 günde bir');
+
+  static String get weekly => _getText('Weekly', 'Haftalık');
+
   static String _getText(String english, String turkish) {
     final isTurkish = LanguageController.instance.value == AppLanguage.turkish;
     return isTurkish ? turkish : english;
